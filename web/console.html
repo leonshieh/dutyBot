@@ -1,0 +1,2007 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>值班机器人管理平台</title>
+    <!-- SheetJS 用于解析xlsx文件 -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js">
+    </script>
+    <!-- Eel JS 桥接库 — 由 Eel 框架自动提供 -->
+    <script type="text/javascript" src="/eel.js"></script>
+    <style>
+        :root {
+            --sidebar-bg: #1e293b;
+            --sidebar-hover: #273548;
+            --sidebar-active: #1a3a5c;
+            --sidebar-text: #b0bec5;
+            --sidebar-text-active: #ffffff;
+            --sidebar-accent: #3b82f6;
+            --sidebar-accent-light: rgba(59, 130, 246, 0.15);
+            --bg: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
+            --border-light: #f1f5f9;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --primary-light: #eff6ff;
+            --success: #10b981;
+            --success-light: #ecfdf5;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --danger-light: #fef2f2;
+            --warning: #f59e0b;
+            --warning-light: #fffbeb;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.08);
+            --shadow-xl: 0 20px 40px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+            --radius-sm: 6px;
+            --radius: 8px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Courier New', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text-primary);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ========== SIDEBAR ========== */
+        .sidebar {
+            width: 240px;
+            min-width: 240px;
+            background: var(--sidebar-bg);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            user-select: none;
+            z-index: 100;
+            box-shadow: 2px 0 12px rgba(0, 0, 0, 0.12);
+            position: relative;
+        }
+
+        .sidebar-header {
+            padding: 20px 18px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-logo {
+            width: 38px;
+            height: 38px;
+            border-radius: var(--radius);
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+        }
+
+        .sidebar-logo svg {
+            width: 20px;
+            height: 20px;
+            fill: #fff;
+        }
+
+        .sidebar-title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .sidebar-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #e2e8f0;
+            letter-spacing: 0.3px;
+            line-height: 1.2;
+        }
+
+        .sidebar-subtitle {
+            font-size: 10.5px;
+            color: #8899aa;
+            letter-spacing: 0.4px;
+            font-weight: 400;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 12px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            overflow-y: auto;
+        }
+
+        .sidebar-nav::-webkit-scrollbar {
+            width: 3px;
+        }
+        .sidebar-nav::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            padding: 11px 14px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all var(--transition);
+            color: var(--sidebar-text);
+            font-size: 14px;
+            font-weight: 500;
+            position: relative;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--sidebar-hover);
+            color: #dde4ea;
+        }
+
+        .nav-item.active {
+            background: var(--sidebar-accent-light);
+            color: var(--sidebar-text-active);
+            font-weight: 600;
+            box-shadow: inset 3px 0 0 var(--sidebar-accent);
+        }
+
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            opacity: 0.75;
+            transition: opacity var(--transition);
+        }
+        .nav-item.active .nav-icon {
+            opacity: 1;
+        }
+        .nav-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+            stroke: currentColor;
+            stroke-width: 0;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--sidebar-accent);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+            letter-spacing: 0.3px;
+            min-width: 20px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .sidebar-footer {
+            padding: 12px 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 11px;
+            color: #5a6d7e;
+            text-align: center;
+            letter-spacing: 0.3px;
+        }
+
+        /* ========== MAIN CONTENT ========== */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg);
+        }
+
+        .top-bar {
+            height: 52px;
+            min-height: 52px;
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 12px;
+            box-shadow: var(--shadow-sm);
+            z-index: 10;
+        }
+
+        .top-bar-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 0.2px;
+        }
+        .top-bar-breadcrumb {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .top-bar-breadcrumb span {
+            color: var(--text-secondary);
+        }
+
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .content-area::-webkit-scrollbar {
+            width: 5px;
+        }
+        .content-area::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 10px;
+        }
+
+        /* ========== PANELS ========== */
+        .panel {
+            display: none;
+            flex-direction: column;
+            gap: 18px;
+            animation: fadeSlideIn 0.3s ease;
+        }
+        .panel.active {
+            display: flex;
+        }
+
+        @keyframes fadeSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ========== CARDS ========== */
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: #fafbfc;
+        }
+        .card-header-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.2px;
+        }
+        .card-header-title .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--primary);
+        }
+        .dot.warning {
+            background: var(--warning);
+        }
+        .dot.success {
+            background: var(--success);
+        }
+        .card-body {
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .card-body.no-padding {
+            padding: 0;
+        }
+
+        /* ========== FORM ELEMENTS ========== */
+        .form-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 160px;
+        }
+        .form-group.label-fixed {
+            flex: 0 0 auto;
+            min-width: auto;
+        }
+        .form-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+        }
+        .form-label .required {
+            color: var(--danger);
+            margin-left: 2px;
+        }
+
+        select,
+        input[type="text"],
+        input[type="url"],
+        input[type="password"],
+        input[type="time"],
+        textarea {
+            padding: 9px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--text-primary);
+            background: #fff;
+            transition: all var(--transition);
+            outline: none;
+            width: 100%;
+            letter-spacing: 0.2px;
+        }
+        select:focus,
+        input:focus,
+        textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            line-height: 1.6;
+        }
+
+        /* ========== CHECKBOX LIST ========== */
+        .checkbox-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 16px;
+            align-items: center;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+        .checkbox-item input[type="checkbox"] {
+            accent-color: var(--primary);
+            width: 16px;
+            height: 16px;
+            margin: 0;
+        }
+
+        /* ========== TOGGLE SWITCH ========== */
+        .toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .toggle-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        /* ========== SKEWED TOGGLE ========== */
+        .tg-wrap {
+            display: inline-block;
+            position: relative;
+            width: 52px;
+            height: 26px;
+            flex-shrink: 0;
+            cursor: pointer;
+            user-select: none;
+            overflow: hidden;
+            border-radius: 4px;
+        }
+        .tg-wrap input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+        .tg-btn {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #cbd5e1;
+            transform: skewX(-12deg);
+            transition: background var(--transition);
+        }
+        .tg-btn::before,
+        .tg-btn::after {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 0.5px;
+            transition: left var(--transition);
+        }
+        .tg-btn::before {
+            left: 0;
+            content: attr(data-tg-off);
+        }
+        .tg-btn::after {
+            left: 100%;
+            content: attr(data-tg-on);
+        }
+        .tg-wrap input:checked+.tg-btn {
+            background: var(--success);
+        }
+        .tg-wrap input:checked+.tg-btn::before {
+            left: -100%;
+        }
+        .tg-wrap input:checked+.tg-btn::after {
+            left: 0;
+        }
+
+        /* ========== BUTTONS ========== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1.5px solid transparent;
+            transition: all var(--transition);
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+            font-family: inherit;
+            line-height: 1.4;
+        }
+        .btn:active {
+            transform: scale(0.97);
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+            box-shadow: 0 1px 2px rgba(59, 130, 246, 0.25);
+        }
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+        .btn-outline {
+            background: #fff;
+            color: var(--text-primary);
+            border-color: var(--border);
+        }
+        .btn-outline:hover {
+            background: #f8fafc;
+        }
+        .btn-danger {
+            background: #fff;
+            color: var(--danger);
+            border-color: #fecaca;
+        }
+        .btn-danger:hover {
+            background: var(--danger-light);
+        }
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 11px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .btn-xs {
+            padding: 3px 8px;
+            font-size: 10px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+        .btn-test {
+            background: #fff;
+            color: var(--primary);
+            border: 1.5px dashed var(--primary);
+        }
+        .btn-test:hover {
+            background: var(--primary-light);
+            border-style: solid;
+        }
+        .btn-ghost {
+            background: transparent;
+            border-color: transparent;
+            color: var(--text-muted);
+            padding: 4px 6px;
+        }
+        .btn-ghost:hover {
+            color: var(--text-primary);
+            background: #f1f5f9;
+        }
+        .btn-start {
+            background: var(--success);
+            color: #fff;
+            border-color: var(--success);
+        }
+        .btn-stop {
+            background: var(--danger);
+            color: #fff;
+            border-color: var(--danger);
+        }
+
+        /* ========== TABLE ========== */
+        .table-wrapper {
+            overflow-x: auto;
+        }
+        .table-wrapper::-webkit-scrollbar {
+            height: 4px;
+        }
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            letter-spacing: 0.2px;
+        }
+        table thead th {
+            background: #f8fafc;
+            padding: 11px 14px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-light);
+            color: var(--text-primary);
+        }
+        table tbody tr:hover {
+            background: #fafcfd;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-success {
+            background: var(--success-light);
+            color: #059669;
+        }
+        .badge-error {
+            background: var(--danger-light);
+            color: #dc2626;
+        }
+        .badge-info {
+            background: var(--primary-light);
+            color: #2563eb;
+        }
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* ========== TASK LIST ========== */
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .task-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #fafcfd;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius);
+            flex-wrap: wrap;
+        }
+        .task-item .task-time {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* ========== MODAL ========== */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.55);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(2px);
+        }
+        .modal-overlay.hidden {
+            display: none;
+        }
+        .modal {
+            background: #fff;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-xl);
+            width: 90%;
+            max-width: 480px;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #fafcfd;
+        }
+        .modal-body {
+            padding: 20px 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .modal-footer {
+            padding: 14px 22px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            background: #fafcfd;
+        }
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition);
+            line-height: 1;
+        }
+        .modal-close:hover {
+            background: #f1f5f9;
+            color: var(--text-primary);
+        }
+
+        /* ========== TOAST ========== */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            padding: 12px 18px;
+            border-radius: var(--radius);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: var(--shadow-lg);
+            animation: toastIn 0.35s, toastOut 0.3s 2.5s forwards;
+        }
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--danger); }
+        .toast-info { background: var(--primary); }
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(60px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        @keyframes toastOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+                transform: translateX(40px);
+            }
+        }
+
+        /* ========== REPLY DIVIDER ========== */
+        .card-divider {
+            border: none;
+            border-top: 1px dashed var(--border);
+            margin: 4px 0;
+        }
+        .card-send-area {
+            display: flex;
+            justify-content: flex-end;
+            padding-top: 4px;
+        }
+
+        /* ========== TASK TAGS ========== */
+        .task-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            white-space: nowrap;
+        }
+        .tag-schedule { background: rgba(59,130,246,0.10); color: #2563eb; }
+        .tag-bot      { background: rgba(139,92,246,0.10); color: #7c3aed; }
+        .tag-content  { background: rgba(16,185,129,0.10); color: #059669; }
+        .tag-at       { background: rgba(245,158,11,0.12); color: #d97706; }
+        .tag-empty    { background: rgba(148,163,184,0.10); color: #94a3b8; }
+
+        /* ========== TIMING TASK MODAL ========== */
+        .timing-rule-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .timing-rule-chip {
+            padding: 7px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all var(--transition);
+            user-select: none;
+            color: var(--text-secondary);
+            background: #fff;
+        }
+        .timing-rule-chip:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .timing-rule-chip.selected {
+            background: var(--primary-light);
+            border-color: var(--primary);
+            color: var(--primary);
+            font-weight: 600;
+        }
+        .timing-rule-detail {
+            display: none;
+            margin-top: 8px;
+        }
+        .timing-rule-detail.show {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* ========== DEBUG LOG VIEWER ========== */
+        #debugLogViewer::-webkit-scrollbar {
+            width: 6px;
+        }
+        #debugLogViewer::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        #debugLogViewer::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+
+        /* ========== DUTY TABLE FILE LIST ========== */
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #fafcfd;
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius);
+            transition: all var(--transition);
+        }
+        .file-item:hover {
+            background: #f1f5f9;
+        }
+        .file-item .file-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: var(--success-light);
+            color: #059669;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .file-item .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .file-item .file-name {
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+        .file-item .file-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .file-item .file-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        /* ========== RESPONSIVE ========== */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 200px;
+                min-width: 200px;
+            }
+            .form-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+        @media (max-width: 640px) {
+            .sidebar {
+                width: 56px;
+                min-width: 56px;
+            }
+            .sidebar-title-group,
+            .sidebar-subtitle,
+            .nav-item span:not(.nav-icon),
+            .nav-badge,
+            .sidebar-footer {
+                display: none;
+            }
+            .nav-item {
+                justify-content: center;
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ==================== SIDEBAR ==================== -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            </div>
+            <div class="sidebar-title-group">
+                <span class="sidebar-title">Bot控制台</span>
+                <span class="sidebar-subtitle">JRT Bot Console</span>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item active" data-panel="panel-duty-notify" onclick="switchPanel('panel-duty-notify', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg></span>
+                <span>值班机器人通知</span>
+            </div>
+            <div class="nav-item" data-panel="panel-custom-msg" onclick="switchPanel('panel-custom-msg', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg></span>
+                <span>自定义消息通知</span>
+            </div>
+            <div class="nav-item" data-panel="panel-duty-table" onclick="switchPanel('panel-duty-table', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg></span>
+                <span>值班信息表</span>
+            </div>
+            <div class="nav-item" data-panel="panel-bot-config" onclick="switchPanel('panel-bot-config', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.33-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.38.12-.56l-1.89-3.28c-.12-.19-.36-.26-.56-.18l-2.38.96c-.5-.38-1.06-.68-1.66-.88L14.38 3.5c-.04-.2-.2-.34-.4-.34h-3.96c-.2 0-.36.14-.4.34l-.42 2.96c-.6.2-1.16.5-1.66.88l-2.38-.96c-.2-.08-.44-.01-.56.18l-1.89 3.28c-.12.19-.07.42.12.56l2.03 1.58c-.04.3-.06.61-.06.94 0 .33.02.64.06.94l-2.03 1.58c-.18.14-.23.38-.12.56l1.89 3.28c.12.19.36.26.56.18l2.38-.96c.5.38 1.06.68 1.66.88l.42 2.96c.04.2.2.34.4.34h3.96c.2 0 .36-.14.4-.34l.42-2.96c.6-.2 1.16-.5 1.66-.88l2.38.96c.2.08.44.01.56-.18l1.89-3.28c.12-.19.07-.42-.12-.56l-2.03-1.58z"/></svg></span>
+                <span>机器人配置</span>
+            </div>
+            <div class="nav-item" data-panel="panel-debug" onclick="switchPanel('panel-debug', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+                <span>调试日志</span>
+            </div>
+        </nav>
+        <div class="sidebar-footer">v2.1.0 · 增强版</div>
+    </aside>
+
+    <!-- ==================== MAIN CONTENT ==================== -->
+    <div class="main-content">
+        <div class="top-bar">
+            <span class="top-bar-title" id="topBarTitle">值班机器人通知</span>
+            <span class="top-bar-breadcrumb">/ <span id="topBarBreadcrumb">通知管理</span></span>
+        </div>
+
+        <div class="content-area" id="contentArea">
+
+            <!-- ========== 值班机器人通知面板 ========== -->
+            <div class="panel active" id="panel-duty-notify">
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>通知基本配置</span></div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label">选择机器人 <span class="required">*</span> (可多选)
+                                <button class="btn btn-outline btn-xs" onclick="selectAllBots('duty')" style="margin-left:8px;">全选</button>
+                                <button class="btn btn-outline btn-xs" onclick="invertBots('duty')" style="margin-left:4px;">反选</button>
+                            </label>
+                            <div class="checkbox-list" id="dutyBotCheckboxList"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">值班信息表 <span class="required">*</span></label>
+                                <select id="dutyTableSelect" style="max-width:260px;">
+                                    <option value="">-- 请选择值班信息表 --</option>
+                                    <option value="table1">本周值班表（技术部）</option>
+                                    <option value="table2">下周值班表（技术部）</option>
+                                    <option value="table3">本月值班总表</option>
+                                </select>
+                            </div>
+                            <div class="form-group label-fixed" style="flex-direction:row;align-items:center;gap:10px;">
+                                <label class="form-label" style="margin:0;">@所有人</label>
+                                <span class="toggle-wrapper">
+                                    <label class="tg-wrap"><input type="checkbox" id="dutyAtAllToggle" onchange="updateToggleLabel(this,'dutyAtAllLabel')"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
+                                    <span class="toggle-label" id="dutyAtAllLabel">关闭</span>
+                                </span>
+                            </div>
+                        </div>
+                        <hr class="card-divider">
+                        <div class="card-send-area">
+                            <button class="btn btn-test" onclick="sendTest('duty')">立即发送</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-header-title"><span class="dot warning"></span>定时任务设置</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-sm" id="dutyTimerBtn" onclick="toggleTimer('duty')">⏸ 调度已暂停</button>
+                            <button class="btn btn-outline btn-sm" onclick="addTimingTask('duty')">+ 添加任务</button>
+                        </div>
+                    </div>
+                    <div class="card-body"><div class="task-list" id="dutyTaskList"></div></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>发送日志</span><div style="display:flex;gap:6px;"><button class="btn btn-outline btn-sm" onclick="reloadLogs().then(()=>showToast('日志已刷新','info'))">刷新</button><button class="btn btn-outline btn-sm" onclick="clearLogs('duty')">清空</button></div></div>
+                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>序号</th><th>发送时间</th><th>机器人</th><th>值班信息表</th><th>@所有人</th><th>状态</th></tr></thead><tbody id="dutyLogTableBody"></tbody></table></div></div>
+                </div>
+            </div>
+
+            <!-- ========== 自定义消息通知面板 ========== -->
+            <div class="panel" id="panel-custom-msg">
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>消息内容配置</span></div>
+                    <div class="card-body">
+                        <textarea id="customMessageText" placeholder="请输入要发送的消息内容..."></textarea>
+                        <div class="form-group">
+                            <label class="form-label">选择发送机器人 <span class="required">*</span> (可多选)
+                                <button class="btn btn-outline btn-xs" onclick="selectAllBots('custom')" style="margin-left:8px;">全选</button>
+                                <button class="btn btn-outline btn-xs" onclick="invertBots('custom')" style="margin-left:4px;">反选</button>
+                            </label>
+                            <div class="checkbox-list" id="customBotCheckboxList"></div>
+                        </div>
+                        <div class="form-group label-fixed" style="flex-direction:row;align-items:center;gap:10px;">
+                            <label class="form-label" style="margin:0;">@所有人</label>
+                            <span class="toggle-wrapper"><label class="tg-wrap"><input type="checkbox" id="customAtAllToggle" onchange="updateToggleLabel(this,'customAtAllLabel')"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label><span class="toggle-label" id="customAtAllLabel">关闭</span></span>
+                        </div>
+                        <hr class="card-divider">
+                        <div class="card-send-area">
+                            <button class="btn btn-test" onclick="sendTest('custom')">立即发送</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-header-title"><span class="dot warning"></span>定时任务设置</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-sm" id="customTimerBtn" onclick="toggleTimer('custom')">⏸ 调度已暂停</button>
+                            <button class="btn btn-outline btn-sm" onclick="addTimingTask('custom')">+ 添加任务</button>
+                        </div>
+                    </div>
+                    <div class="card-body"><div class="task-list" id="customTaskList"></div></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>发送日志</span><div style="display:flex;gap:6px;"><button class="btn btn-outline btn-sm" onclick="reloadLogs().then(()=>showToast('日志已刷新','info'))">刷新</button><button class="btn btn-outline btn-sm" onclick="clearLogs('custom')">清空</button></div></div>
+                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>序号</th><th>发送时间</th><th>机器人</th><th>消息摘要</th><th>
+                        
+                    </th><th>状态</th></tr></thead><tbody id="customLogTableBody"></tbody></table></div></div>
+                </div>
+            </div>
+
+            <!-- ========== 值班信息表面板 ========== -->
+            <div class="panel" id="panel-duty-table">
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>上传值班表文件</span></div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <input type="file" id="dutyFileInput" accept=".xlsx, .xls" style="flex:1;">
+                            <button class="btn btn-primary" onclick="parseDutyTable()">解析预览</button>
+                        </div>
+                        <div style="font-size:12px;color:var(--text-muted);">支持 .xlsx 格式，第一列日期，第二列星期，第三列值班人员</div>
+                    </div>
+                </div>
+                <div class="card" id="dutyPreviewCard" style="display:none;">
+                    <div class="card-header">
+                        <span class="card-header-title"><span class="dot success"></span>值班表预览</span>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <span id="dutyTableStatus" style="font-size:12px;"></span>
+                            <button class="btn btn-primary btn-sm" id="dutyUploadBtn" onclick="uploadDutyTable()">上传保存</button>
+                        </div>
+                    </div>
+                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>日期</th><th>星期</th><th>值班人员</th></tr></thead><tbody id="dutyPreviewBody"></tbody></table></div></div>
+                </div>
+                <div class="card" id="dutyFileListCard" style="display:none;">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>已上传的值班文件</span></div>
+                    <div class="card-body"><div class="file-list" id="dutyFileList"></div></div>
+                </div>
+            </div>
+
+            <!-- ========== 机器人配置面板 ========== -->
+            <div class="panel" id="panel-bot-config">
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>机器人配置列表</span><button class="btn btn-primary btn-sm" onclick="openAddBotModal()">+ 添加机器人</button></div>
+                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>序号</th><th>名称</th><th>Webhook</th><th>Secret</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="botConfigTableBody"></tbody></table></div></div>
+                </div>
+            </div>
+
+            <!-- ========== 调试日志面板 ========== -->
+            <div class="panel" id="panel-debug">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-header-title"><span class="dot"></span>运行日志</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-outline btn-sm" onclick="refreshDebugLogs()">刷新</button>
+                            <button class="btn btn-outline btn-sm" onclick="toggleAutoRefresh()" id="autoRefreshBtn">自动刷新：关</button>
+                            <button class="btn btn-primary btn-sm" onclick="exportDebugLogs()">导出TXT</button>
+                            <button class="btn btn-ghost btn-sm" onclick="clearDebugDisplay()">清空显示</button>
+                        </div>
+                    </div>
+                    <div class="card-body no-padding">
+                        <pre id="debugLogViewer" style="margin:0;padding:16px;background:#0f172a;color:#e2e8f0;font-family:var(--font-mono);font-size:12px;line-height:1.7;max-height:600px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;border-radius:0 0 var(--radius-lg) var(--radius-lg);">正在加载日志...</pre>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ==================== 定时任务弹窗 ==================== -->
+    <div class="modal-overlay hidden" id="timingTaskModalOverlay">
+        <div class="modal">
+            <div class="modal-header"><h3 id="timingTaskModalTitle">添加定时任务</h3><button class="modal-close" onclick="closeTimingTaskModal()">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">选择机器人 <span class="required">*</span></label>
+                    <div class="checkbox-list" id="timingBotCheckboxList"></div>
+                </div>
+                <div class="form-group" id="timingContentGroup">
+                    <label class="form-label" id="timingContentLabel">发送内容 <span class="required">*</span></label>
+                    <select id="timingTableSelect" style="display:none;"><option value="">-- 请选择值班信息表 --</option></select>
+                    <textarea id="timingMessageText" style="display:none;" placeholder="请输入要发送的消息内容..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group label-fixed" style="flex-direction:row;align-items:center;gap:10px;">
+                        <label class="form-label" style="margin:0;">@所有人</label>
+                        <span class="toggle-wrapper"><label class="tg-wrap"><input type="checkbox" id="timingAtAllToggle" onchange="updateToggleLabel(this,'timingAtAllLabel')"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label><span class="toggle-label" id="timingAtAllLabel">关闭</span></span>
+                    </div>
+                </div>
+                <hr class="card-divider">
+                <div class="form-group">
+                    <label class="form-label">执行时间 <span class="required">*</span></label>
+                    <input type="time" id="timingTaskTime" value="09:00">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">重复规则 <span class="required">*</span></label>
+                    <div class="timing-rule-options" id="timingRuleOptions">
+                        <div class="timing-rule-chip selected" data-rule="daily" data-label="每天" onclick="selectTimingRule(this)">每天</div>
+                        <div class="timing-rule-chip" data-rule="weekday" data-label="工作日" onclick="selectTimingRule(this)">工作日</div>
+                        <div class="timing-rule-chip" data-rule="weekly" data-label="每周" onclick="selectTimingRule(this)">每周</div>
+                    </div>
+                    <div class="timing-rule-detail" id="timingWeeklyDetail">
+                        <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">选择星期：</span>
+                        <div class="checkbox-list" id="timingWeekdayCheckboxes">
+                            <label class="checkbox-item"><input type="checkbox" value="1">周一</label>
+                            <label class="checkbox-item"><input type="checkbox" value="2">周二</label>
+                            <label class="checkbox-item"><input type="checkbox" value="3">周三</label>
+                            <label class="checkbox-item"><input type="checkbox" value="4">周四</label>
+                            <label class="checkbox-item"><input type="checkbox" value="5">周五</label>
+                            <label class="checkbox-item"><input type="checkbox" value="6">周六</label>
+                            <label class="checkbox-item"><input type="checkbox" value="0">周日</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeTimingTaskModal()">取消</button>
+                <button class="btn btn-primary" id="timingTaskConfirmBtn" onclick="confirmTimingTask()">确认添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 添加/编辑机器人弹窗 ==================== -->
+    <div class="modal-overlay hidden" id="addBotModalOverlay">
+        <div class="modal">
+            <div class="modal-header"><h3 id="addBotModalHeader">添加机器人配置</h3><button class="modal-close" onclick="closeAddBotModal()">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">机器人名称 <span class="required">*</span></label><input type="text" id="botNameInput" placeholder="如：技术值班机器人"></div>
+                <div class="form-group"><label class="form-label">Webhook地址 <span class="required">*</span></label><input type="url" id="botWebhookInput" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."></div>
+                <div class="form-group"><label class="form-label">加签Secret</label><input type="text" id="botSecretInput" placeholder="钉钉机器人安全设置→加签→复制SEC密钥"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline" onclick="closeAddBotModal()">取消</button><button class="btn btn-primary" id="addBotConfirmBtn" onclick="confirmAddBot()">确认添加</button></div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        // ============ 全局数据 ============
+        let botConfigs = [];
+        let dutyTasks = [];
+        let customTasks = [];
+        let dutyLogs = [];
+        let customLogs = [];
+        let dutyTableFiles = [];
+        let pendingDutyData = null;
+        let pendingDutyFileName = '';
+        let pendingTimingTaskType = null;
+        let editingBotId = null;
+
+        // ============ 初始化 ============
+        async function init() {
+            // 等待 Eel WebSocket 连接就绪（最多重试 10 次）
+            for (let i = 0; i < 10; i++) {
+                try {
+                    const data = await eel.get_all_data()();
+                    botConfigs = data.bots || [];
+                    dutyTableFiles = data.duty_tables || [];
+                    dutyTasks = data.duty_tasks || [];
+                    customTasks = data.custom_tasks || [];
+                    dutyLogs = data.duty_logs || [];
+                    customLogs = data.custom_logs || [];
+                    console.log('✅ 后端数据加载成功');
+                    break;
+                } catch (err) {
+                    console.warn(`⏳ 等待后端连接... (${i + 1}/10)`, err);
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+            refreshAllUI();
+            console.log('✅ 界面初始化完成');
+        }
+
+        function refreshAllUI() {
+            try {
+                renderBotConfigTable();
+                renderDutyBotCheckboxes();
+                renderCustomBotCheckboxes();
+                renderDutyTasks();
+                renderCustomTasks();
+                renderDutyLogs();
+                renderCustomLogs();
+                renderDutyFileList();
+                renderDutyTableSelect();
+                updateToggleLabel(document.getElementById('dutyAtAllToggle'), 'dutyAtAllLabel');
+                updateToggleLabel(document.getElementById('customAtAllToggle'), 'customAtAllLabel');
+                updateSchedulerButtons();
+            } catch (err) {
+                console.error('refreshAllUI 异常:', err);
+            }
+        }
+
+        async function updateSchedulerButtons() {
+            // 根据本地任务数据立即更新按钮状态
+            const dutyActive = dutyTasks.some(t => t.enabled);
+            const customActive = customTasks.some(t => t.enabled);
+            _setSchedulerButton('duty', dutyActive);
+            _setSchedulerButton('custom', customActive);
+
+            // 异步从后端获取精确状态
+            try {
+                const status = await eel.get_scheduler_status()();
+                _setSchedulerButton('duty', status.duty_enabled > 0);
+                _setSchedulerButton('custom', status.custom_enabled > 0);
+            } catch (err) {
+                // 后端不可用时使用本地状态
+            }
+        }
+
+        function _setSchedulerButton(type, active) {
+            const btnId = type === 'duty' ? 'dutyTimerBtn' : 'customTimerBtn';
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            if (active) {
+                btn.textContent = '▶ 调度运行中';
+                btn.className = 'btn btn-sm';
+                btn.style.background = '#6495ED';
+                btn.style.color = '#fff';
+                btn.style.borderColor = '#6495ED';
+            } else {
+                btn.textContent = '⏸ 调度已暂停';
+                btn.className = 'btn btn-sm';
+                btn.style.background = '#f1f5f9';
+                btn.style.color = '#94a3b8';
+                btn.style.borderColor = '#e2e8f0';
+            }
+        }
+
+        // ============ 面板切换 ============
+        function switchPanel(panelId, navItem) {
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            navItem.classList.add('active');
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.getElementById(panelId).classList.add('active');
+            const titles = {
+                'panel-duty-notify': { title: '值班机器人通知', breadcrumb: '通知管理' },
+                'panel-custom-msg': { title: '自定义消息通知', breadcrumb: '消息管理' },
+                'panel-duty-table': { title: '值班信息表', breadcrumb: '数据管理' },
+                'panel-bot-config': { title: '机器人配置', breadcrumb: '系统配置' },
+                'panel-debug': { title: '调试日志', breadcrumb: '运行日志' }
+            };
+            const info = titles[panelId] || { title: panelId, breadcrumb: '' };
+            document.getElementById('topBarTitle').textContent = info.title;
+            document.getElementById('topBarBreadcrumb').textContent = info.breadcrumb;
+            if (panelId === 'panel-duty-notify') renderDutyBotCheckboxes();
+            if (panelId === 'panel-custom-msg') renderCustomBotCheckboxes();
+            if (panelId === 'panel-duty-table') { renderDutyFileList();
+                renderDutyTableSelect(); }
+            if (panelId === 'panel-debug') refreshDebugLogs();
+            else if (debugAutoRefreshTimer) { clearInterval(debugAutoRefreshTimer);
+                debugAutoRefresh = false;
+                const btn = document.getElementById('autoRefreshBtn'); if (btn) { btn.textContent = '自动刷新：关';
+                    btn.className = 'btn btn-outline btn-sm'; } }
+        }
+
+        // ============ 机器人多选复选框 (值班通知) ============
+        function renderDutyBotCheckboxes() {
+            const container = document.getElementById('dutyBotCheckboxList');
+            container.innerHTML = botConfigs.map(bot => `
+                <label class="checkbox-item">
+                    <input type="checkbox" value="${bot.id}" class="duty-bot-checkbox">
+                    <span>${escapeHtml(bot.name)}</span>
+                </label>
+            `).join('');
+        }
+
+        function getSelectedDutyBotIds() {
+            return Array.from(document.querySelectorAll('.duty-bot-checkbox:checked')).map(cb => parseInt(cb.value));
+        }
+
+        // ============ 机器人多选复选框 (自定义消息) ============
+        function renderCustomBotCheckboxes() {
+            const container = document.getElementById('customBotCheckboxList');
+            if (!container) return;
+            container.innerHTML = botConfigs.map(bot => `
+                <label class="checkbox-item">
+                    <input type="checkbox" value="${bot.id}" class="custom-bot-checkbox">
+                    <span>${escapeHtml(bot.name)}</span>
+                </label>
+            `).join('');
+        }
+
+        function getSelectedCustomBotIds() {
+            return Array.from(document.querySelectorAll('.custom-bot-checkbox:checked')).map(cb => parseInt(cb.value));
+        }
+
+        function selectAllBots(panel) {
+            const cls = panel === 'duty' ? '.duty-bot-checkbox' : '.custom-bot-checkbox';
+            document.querySelectorAll(cls).forEach(cb => { cb.checked = true; });
+        }
+
+        function invertBots(panel) {
+            const cls = panel === 'duty' ? '.duty-bot-checkbox' : '.custom-bot-checkbox';
+            document.querySelectorAll(cls).forEach(cb => { cb.checked = !cb.checked; });
+        }
+
+        // ============ 机器人配置表格 ============
+        function renderBotConfigTable() {
+            const tbody = document.getElementById('botConfigTableBody');
+            const createdAt = b => b.created_at || b.createdAt || '';
+            tbody.innerHTML = botConfigs.map((b, i) => `
+                <tr>
+                    <td>${i+1}</td>
+                    <td><strong>${escapeHtml(b.name)}</strong></td>
+                    <td style="font-family:monospace;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(b.webhook)}</td>
+                    <td>${b.secret ? '****'+b.secret.slice(-4) : '<span style="color:#94a3b8;">未设置</span>'}</td>
+                    <td>${escapeHtml(createdAt(b))}</td>
+                    <td style="display:flex;gap:6px;">
+                        <button class="btn btn-outline btn-xs" onclick="openEditBotModal(${b.id})">编辑</button>
+                        <button class="btn btn-danger btn-xs" onclick="deleteBot(${b.id})">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openAddBotModal() {
+            editingBotId = null;
+            const header = document.getElementById('addBotModalHeader');
+            const confirmBtn = document.getElementById('addBotConfirmBtn');
+            if (header) header.textContent = '添加机器人配置';
+            if (confirmBtn) confirmBtn.textContent = '确认添加';
+            document.getElementById('botNameInput').value = '';
+            document.getElementById('botWebhookInput').value = '';
+            document.getElementById('botSecretInput').value = '';
+            document.getElementById('addBotModalOverlay').classList.remove('hidden');
+        }
+
+        function openEditBotModal(botId) {
+            const bot = botConfigs.find(b => b.id === botId);
+            if (!bot) return;
+            editingBotId = botId;
+            const header = document.getElementById('addBotModalHeader');
+            const confirmBtn = document.getElementById('addBotConfirmBtn');
+            if (header) header.textContent = '修改机器人配置';
+            if (confirmBtn) confirmBtn.textContent = '保存修改';
+            document.getElementById('botNameInput').value = bot.name || '';
+            document.getElementById('botWebhookInput').value = bot.webhook || '';
+            document.getElementById('botSecretInput').value = bot.secret || '';
+            document.getElementById('addBotModalOverlay').classList.remove('hidden');
+        }
+
+        function closeAddBotModal() {
+            document.getElementById('addBotModalOverlay').classList.add('hidden');
+            editingBotId = null;
+        }
+
+        async function confirmAddBot() {
+            const name = document.getElementById('botNameInput').value.trim();
+            const webhook = document.getElementById('botWebhookInput').value.trim();
+            const secret = document.getElementById('botSecretInput').value.trim();
+            if (!name || !webhook) return showToast('请填写名称和Webhook', 'error');
+            try {
+                let result;
+                if (editingBotId) {
+                    result = await eel.update_bot_eel(editingBotId, name, webhook, secret)();
+                } else {
+                    result = await eel.create_bot(name, webhook, secret)();
+                }
+                if (result.success) {
+                    await reloadData();
+                    closeAddBotModal();
+                    showToast(editingBotId ? `机器人「${name}」已更新` : `机器人「${name}」已添加`, 'success');
+                } else {
+                    showToast(result.error || '操作失败', 'error');
+                }
+            } catch (err) {
+                showToast('操作失败：' + err, 'error');
+            }
+        }
+
+        async function deleteBot(id) {
+            if (!confirm('确定删除该机器人配置吗？')) return;
+            try {
+                await eel.remove_bot(id)();
+                await reloadData();
+                showToast('机器人已删除', 'info');
+            } catch (err) {
+                showToast('删除失败：' + err, 'error');
+            }
+        }
+
+        // ============ 定时任务渲染与操作 ============
+        function renderDutyTasks() {
+            const container = document.getElementById('dutyTaskList');
+            container.innerHTML = dutyTasks.length === 0 ?
+                '<div class="task-empty">暂无定时任务</div>' :
+                dutyTasks.map(t => `
+                <div class="task-item">
+                    <span style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <span class="task-tag tag-schedule">${t.rule} ${t.time}</span>
+                        ${_buildTaskTags(t, 'duty')}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                        <label class="tg-wrap"><input type="checkbox" ${t.enabled?'checked':''} onchange="toggleTaskEnabled(${t.id}, this.checked)"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
+                        <button class="btn btn-danger btn-xs" onclick="removeTask(${t.id}, 'duty')">删除</button>
+                    </span>
+                </div>`).join('');
+        }
+
+        function renderCustomTasks() {
+            const container = document.getElementById('customTaskList');
+            container.innerHTML = customTasks.length === 0 ?
+                '<div class="task-empty">暂无定时任务</div>' :
+                customTasks.map(t => `
+                <div class="task-item">
+                    <span style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <span class="task-tag tag-schedule">${t.rule} ${t.time}</span>
+                        ${_buildTaskTags(t, 'custom')}
+                    </span>
+                    <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                        <label class="tg-wrap"><input type="checkbox" ${t.enabled?'checked':''} onchange="toggleTaskEnabled(${t.id}, this.checked)"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
+                        <button class="btn btn-danger btn-xs" onclick="removeTask(${t.id}, 'custom')">删除</button>
+                    </span>
+                </div>`).join('');
+        }
+
+        function _buildTaskTags(t, type) {
+            const tags = [];
+            const botIds = (t.bot_ids || t.botIds || '').toString().split(',').filter(Boolean).map(Number);
+            const botNames = botIds.length > 0
+                ? botIds.map(id => botConfigs.find(b => b.id === id)?.name || id).filter(Boolean).join('、')
+                : '';
+            if (botNames) tags.push(`<span class="task-tag tag-bot">${escapeHtml(botNames)}</span>`);
+            if (type === 'duty') {
+                const tableId = t.table_id || t.tableId;
+                if (tableId) {
+                    const table = dutyTableFiles.find(f => f.id == tableId);
+                    if (table) tags.push(`<span class="task-tag tag-content">${escapeHtml(table.name || table.file_name || '值班表')}</span>`);
+                }
+            } else {
+                const msg = t.message_text || t.messageText || '';
+                if (msg) tags.push(`<span class="task-tag tag-content">${escapeHtml(msg.length > 40 ? msg.slice(0, 40) + '...' : msg)}</span>`);
+            }
+            const atAll = t.at_all || t.atAll;
+            if (atAll) tags.push(`<span class="task-tag tag-at">@所有人</span>`);
+            return tags.length > 0 ? tags.join('') : '<span class="task-tag tag-empty">未配置发送内容</span>';
+        }
+
+        async function toggleTaskEnabled(taskId, enabled) {
+            try {
+                await eel.toggle_timing_task(taskId, enabled)();
+                await reloadData();
+            } catch (err) {
+                showToast('操作失败：' + err, 'error');
+            }
+        }
+
+        async function removeTask(taskId, type) {
+            try {
+                await eel.remove_timing_task(taskId)();
+                await reloadData();
+                showToast('任务已删除', 'info');
+            } catch (err) {
+                showToast('删除失败：' + err, 'error');
+            }
+        }
+
+        function addTimingTask(type) {
+            pendingTimingTaskType = type;
+            document.getElementById('timingTaskModalTitle').textContent = '添加定时任务';
+            document.getElementById('timingTaskConfirmBtn').textContent = '确认添加';
+            document.getElementById('timingTaskTime').value = '09:00';
+            document.querySelectorAll('.timing-rule-chip').forEach(c => c.classList.remove('selected'));
+            const defaultChip = document.querySelector('.timing-rule-chip[data-rule="daily"]');
+            if (defaultChip) defaultChip.classList.add('selected');
+            document.getElementById('timingWeeklyDetail').classList.remove('show');
+            // 重置发送内容
+            document.getElementById('timingAtAllToggle').checked = false;
+            updateToggleLabel(document.getElementById('timingAtAllToggle'), 'timingAtAllLabel');
+            _renderTimingBotCheckboxes();
+            _renderTimingContent(type);
+            document.getElementById('timingTaskModalOverlay').classList.remove('hidden');
+        }
+
+        function _renderTimingBotCheckboxes() {
+            const container = document.getElementById('timingBotCheckboxList');
+            container.innerHTML = botConfigs.map(bot => `
+                <label class="checkbox-item">
+                    <input type="checkbox" value="${bot.id}" class="timing-bot-checkbox">
+                    <span>${escapeHtml(bot.name)}</span>
+                </label>
+            `).join('');
+        }
+
+        function _renderTimingContent(type) {
+            const tableSel = document.getElementById('timingTableSelect');
+            const msgText = document.getElementById('timingMessageText');
+            const label = document.getElementById('timingContentLabel');
+            if (type === 'duty') {
+                label.textContent = '值班信息表 *';
+                tableSel.style.display = '';
+                msgText.style.display = 'none';
+                tableSel.innerHTML = '<option value="">-- 请选择值班信息表 --</option>';
+                dutyTableFiles.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f.id;
+                    opt.textContent = (f.name || f.file_name) + ' (' + (f.record_count || f.recordCount || 0) + '条)';
+                    tableSel.appendChild(opt);
+                });
+            } else {
+                label.textContent = '消息内容 *';
+                tableSel.style.display = 'none';
+                msgText.style.display = '';
+                msgText.value = '';
+            }
+        }
+
+        function selectTimingRule(chip) {
+            document.querySelectorAll('.timing-rule-chip').forEach(c => c.classList.remove('selected'));
+            chip.classList.add('selected');
+            const rule = chip.dataset.rule;
+            const weeklyDetail = document.getElementById('timingWeeklyDetail');
+            if (rule === 'weekly') {
+                weeklyDetail.classList.add('show');
+            } else {
+                weeklyDetail.classList.remove('show');
+            }
+        }
+
+        function closeTimingTaskModal() {
+            document.getElementById('timingTaskModalOverlay').classList.add('hidden');
+            pendingTimingTaskType = null;
+        }
+
+        async function confirmTimingTask() {
+            const time = document.getElementById('timingTaskTime').value;
+            if (!time) return showToast('请设置执行时间', 'error');
+
+            // 收集机器人
+            const botIds = Array.from(document.querySelectorAll('.timing-bot-checkbox:checked')).map(cb => parseInt(cb.value));
+            if (botIds.length === 0) return showToast('请至少选择一个机器人', 'error');
+
+            // 收集发送内容
+            let message_text = '';
+            let table_id = null;
+            if (pendingTimingTaskType === 'duty') {
+                table_id = document.getElementById('timingTableSelect').value;
+                if (!table_id) return showToast('请选择值班信息表', 'error');
+            } else {
+                message_text = document.getElementById('timingMessageText').value.trim();
+                if (!message_text) return showToast('请输入消息内容', 'error');
+            }
+            const at_all = document.getElementById('timingAtAllToggle').checked;
+
+            // 收集规则
+            const selectedChip = document.querySelector('.timing-rule-chip.selected');
+            const ruleValue = selectedChip ? selectedChip.dataset.rule : 'daily';
+            const ruleLabel = selectedChip ? selectedChip.dataset.label : '每天';
+
+            let ruleDisplay = ruleLabel;
+            let finalRuleValue = ruleValue;
+
+            if (ruleValue === 'weekly') {
+                const checkedBoxes = document.querySelectorAll('#timingWeekdayCheckboxes input:checked');
+                const checkedValues = Array.from(checkedBoxes).map(cb => cb.value);
+                const checkedLabels = Array.from(checkedBoxes).map(cb => ['日', '一', '二', '三', '四', '五', '六'][parseInt(cb.value)]);
+                if (checkedValues.length === 0) return showToast('请至少选择一个星期', 'error');
+                ruleDisplay = '每周' + checkedLabels.join('、');
+                finalRuleValue = 'weekly_' + checkedValues.join(',');
+            }
+
+            const taskData = {
+                task_type: pendingTimingTaskType,
+                exec_time: time,
+                rule: ruleDisplay,
+                rule_value: finalRuleValue,
+                bot_ids: botIds.join(','),
+                message_text: message_text,
+                table_id: table_id ? parseInt(table_id) : null,
+                at_all: at_all ? 1 : 0,
+            };
+
+            try {
+                const result = await eel.add_timing_task(taskData)();
+                if (result.success) {
+                    await reloadData();
+                    closeTimingTaskModal();
+                    showToast(`已添加定时任务：${time} ${ruleDisplay}`, 'success');
+                }
+            } catch (err) {
+                showToast('添加失败：' + err, 'error');
+            }
+        }
+
+        // 调度状态按钮：一键启停该类型所有定时任务
+        async function toggleTimer(type) {
+            const tasks = type === 'duty' ? dutyTasks : customTasks;
+            if (tasks.length === 0) return showToast('暂无定时任务，请先添加', 'info');
+            const anyEnabled = tasks.some(t => t.enabled);
+            const newEnabled = !anyEnabled;
+            try {
+                for (const t of tasks) {
+                    await eel.toggle_timing_task(t.id, newEnabled)();
+                }
+                await reloadData();
+                showToast(newEnabled ? '所有任务已启用' : '所有任务已暂停', 'success');
+            } catch (err) {
+                showToast('操作失败：' + err, 'error');
+            }
+        }
+
+        // ============ 发送测试 ============
+        async function sendTest(type) {
+            if (type === 'duty') {
+                const botIds = getSelectedDutyBotIds();
+                const tableId = document.getElementById('dutyTableSelect').value;
+                const atAll = document.getElementById('dutyAtAllToggle').checked;
+                if (botIds.length === 0) return showToast('请至少选择一个机器人', 'error');
+                if (!tableId) return showToast('请选择值班信息表', 'error');
+                try {
+                    const result = await eel.send_duty_notification_eel(botIds, tableId, atAll)();
+                    await reloadLogs();
+                    showToast(result.success ? `发送成功 → ${result.bot_names}` : '发送失败: ' + (result.error || ''),
+                        result.success ? 'success' : 'error');
+                } catch (err) {
+                    showToast('发送异常：' + err, 'error');
+                }
+            } else {
+                const botIds = getSelectedCustomBotIds();
+                const msg = document.getElementById('customMessageText').value.trim();
+                const atAll = document.getElementById('customAtAllToggle').checked;
+                if (botIds.length === 0) return showToast('请至少选择一个机器人', 'error');
+                if (!msg) return showToast('请输入消息内容', 'error');
+                try {
+                    const result = await eel.send_custom_message_eel(botIds, msg, atAll)();
+                    await reloadLogs();
+                    showToast(result.success ? `发送成功 → ${result.bot_names}` : '发送失败: ' + (result.error || ''),
+                        result.success ? 'success' : 'error');
+                } catch (err) {
+                    showToast('发送异常：' + err, 'error');
+                }
+            }
+        }
+
+        function renderDutyLogs() {
+            const tbody = document.getElementById('dutyLogTableBody');
+            const time = l => l.time || l.sent_at || '';
+            const bot = l => l.bot || l.bot_names || '';
+            const table = l => l.table || l.table_name || '';
+            const atAll = l => l.atAll !== undefined ? l.atAll : l.at_all;
+            tbody.innerHTML = dutyLogs.length === 0 ?
+                '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">暂无发送记录</td></tr>' :
+                dutyLogs.map((l, i) => `
+                <tr><td>${i+1}</td><td>${escapeHtml(time(l))}</td><td>${escapeHtml(bot(l))}</td><td>${escapeHtml(table(l))}</td><td>${atAll(l)?'是':'否'}</td><td><span class="badge ${l.status==='success'?'badge-success':'badge-error'}">${l.status==='success'?'成功':'失败'}</span></td></tr>
+            `).join('');
+        }
+
+        function renderCustomLogs() {
+            const tbody = document.getElementById('customLogTableBody');
+            const time = l => l.time || l.sent_at || '';
+            const bot = l => l.bot || l.bot_names || '';
+            const summary = l => l.summary || l.message_summary || '';
+            const atAll = l => l.atAll !== undefined ? l.atAll : l.at_all;
+            tbody.innerHTML = customLogs.length === 0 ?
+                '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">暂无发送记录</td></tr>' :
+                customLogs.map((l, i) => `
+                <tr><td>${i+1}</td><td>${escapeHtml(time(l))}</td><td>${escapeHtml(bot(l))}</td><td>${escapeHtml(summary(l))}</td><td>${atAll(l)?'是':'否'}</td><td><span class="badge ${l.status==='success'?'badge-success':'badge-error'}">${l.status==='success'?'成功':'失败'}</span></td></tr>
+            `).join('');
+        }
+
+        function clearLogs(type) {
+            if (!confirm('清空所有日志？')) return;
+            eel.clear_send_logs(type)().then(() => reloadLogs()).catch(err => showToast('清空失败：' + err, 'error'));
+            showToast('日志已清空', 'info');
+        }
+
+        async function reloadLogs() {
+            try {
+                dutyLogs = await eel.get_send_logs('duty')();
+                customLogs = await eel.get_send_logs('custom')();
+                renderDutyLogs();
+                renderCustomLogs();
+            } catch (err) {
+                console.warn('刷新日志失败:', err);
+            }
+        }
+
+        async function reloadData() {
+            try {
+                const data = await eel.get_all_data()();
+                botConfigs = data.bots || [];
+                dutyTableFiles = data.duty_tables || [];
+                dutyTasks = data.duty_tasks || [];
+                customTasks = data.custom_tasks || [];
+                dutyLogs = data.duty_logs || [];
+                customLogs = data.custom_logs || [];
+                refreshAllUI();
+            } catch (err) {
+                console.warn('刷新数据失败:', err);
+            }
+        }
+
+        // ============ 值班表上传解析 ============
+        function parseDutyTable() {
+            const fileInput = document.getElementById('dutyFileInput');
+            const file = fileInput.files[0];
+            if (!file) return showToast('请选择文件', 'error');
+            pendingDutyFileName = file.name;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.SheetNames[0];
+                    const sheet = workbook.Sheets[firstSheet];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+                    if (jsonData.length < 2) return showToast('表格至少需要包含标题行和一行数据', 'error');
+
+                    const header = jsonData[0];
+                    if (!header || header.length < 3 || !header[0] || !header[1] || !header[2]) {
+                        return showToast('格式错误：前三列必须为日期、星期、值班人员', 'error');
+                    }
+
+                    const rows = jsonData.slice(1).filter(row => row.some(cell => cell !== ''));
+                    pendingDutyData = rows.map(row => ({
+                        date: _fmtExcelDate(row[0]),
+                        weekday: row[1]?.toString().trim() || '',
+                        person: row[2]?.toString().trim() || ''
+                    }));
+
+                    if (pendingDutyData.length === 0) return showToast('未解析到有效数据', 'error');
+
+                    renderDutyPreview(pendingDutyData);
+                    showToast(`成功解析 ${pendingDutyData.length} 条值班记录`, 'success');
+                } catch (err) {
+                    showToast('文件解析失败：' + err.message, 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function uploadDutyTable() {
+            if (!pendingDutyData || pendingDutyData.length === 0) return showToast('请先解析值班表', 'error');
+            try {
+                const result = await eel.save_duty_table_from_frontend(pendingDutyFileName, pendingDutyData)();
+                if (result.success) {
+                    await reloadData();
+                    showToast(`值班表「${result.name}」已上传`, 'success');
+                } else {
+                    showToast(result.error || '上传失败', 'error');
+                }
+            } catch (err) {
+                showToast('上传失败：' + err, 'error');
+            }
+        }
+
+        function renderDutyTableSelect() {
+            const sel = document.getElementById('dutyTableSelect');
+            if (!sel) return;
+            const cur = sel.value;
+            sel.innerHTML = '<option value="">-- 请选择值班信息表 --</option>';
+            dutyTableFiles.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f.id;
+                opt.textContent = f.name + ' (' + (f.record_count || f.recordCount || 0) + '条)';
+                sel.appendChild(opt);
+            });
+            if (cur && dutyTableFiles.some(f => f.id == cur)) sel.value = cur;
+        }
+
+        function renderDutyFileList() {
+            const card = document.getElementById('dutyFileListCard');
+            const container = document.getElementById('dutyFileList');
+            if (dutyTableFiles.length === 0) {
+                card.style.display = 'none';
+                return;
+            }
+            card.style.display = 'block';
+            const recordCount = f => f.record_count || f.recordCount || 0;
+            const uploadTime = f => f.created_at || f.uploadTime || '';
+            container.innerHTML = dutyTableFiles.map(f => `
+                <div class="file-item">
+                    <div class="file-icon">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${escapeHtml(f.name || f.file_name)}</div>
+                        <div class="file-meta">${recordCount(f)} 条记录 · ${escapeHtml(uploadTime(f))}</div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="btn btn-outline btn-xs" onclick="previewDutyFile(${f.id})">预览</button>
+                        <button class="btn btn-danger btn-xs" onclick="deleteDutyFile(${f.id})">删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function previewDutyFile(id) {
+            try {
+                const records = await eel.get_duty_records(id)();
+                renderDutyPreview(records.map(r => ({
+                    date: _fmtExcelDate(r.duty_date || r.date),
+                    weekday: r.weekday,
+                    person: r.person,
+                })));
+                document.getElementById('dutyPreviewCard').scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                showToast('加载失败：' + err, 'error');
+            }
+        }
+
+        async function deleteDutyFile(id) {
+            if (!confirm('确定删除该值班文件吗？')) return;
+            try {
+                await eel.remove_duty_table(id)();
+                await reloadData();
+                showToast('值班文件已删除', 'info');
+            } catch (err) {
+                showToast('删除失败：' + err, 'error');
+            }
+        }
+
+        function renderDutyPreview(data) {
+            const card = document.getElementById('dutyPreviewCard');
+            const tbody = document.getElementById('dutyPreviewBody');
+            const statusSpan = document.getElementById('dutyTableStatus');
+            card.style.display = 'block';
+            statusSpan.textContent = `共 ${data.length} 条记录`;
+            tbody.innerHTML = data.map(row => `
+                <tr>
+                    <td>${escapeHtml(row.date)}</td>
+                    <td>${escapeHtml(row.weekday)}</td>
+                    <td><strong>${escapeHtml(row.person)}</strong></td>
+                </tr>
+            `).join('');
+        }
+
+        // ============ 辅助函数 ============
+        function updateToggleLabel(toggle, labelId) {
+            const label = document.getElementById(labelId);
+            if (label) {
+                label.textContent = toggle.checked ? '开启' : '关闭';
+                label.style.color = toggle.checked ? 'var(--primary)' : 'var(--text-muted)';
+            }
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // ============ 调试日志 ============
+        let debugAutoRefresh = false;
+        let debugAutoRefreshTimer = null;
+
+        async function refreshDebugLogs() {
+            const viewer = document.getElementById('debugLogViewer');
+            if (!viewer) return;
+            try {
+                const logs = await eel.get_debug_logs(300)();
+                viewer.textContent = logs || '暂无日志';
+                viewer.scrollTop = viewer.scrollHeight;
+            } catch (err) {
+                viewer.textContent = '❌ 无法连接后端获取日志: ' + err;
+            }
+        }
+
+        function toggleAutoRefresh() {
+            debugAutoRefresh = !debugAutoRefresh;
+            const btn = document.getElementById('autoRefreshBtn');
+            if (debugAutoRefresh) {
+                btn.textContent = '自动刷新：开';
+                btn.className = 'btn btn-start btn-sm';
+                refreshDebugLogs();
+                debugAutoRefreshTimer = setInterval(refreshDebugLogs, 3000);
+            } else {
+                btn.textContent = '自动刷新：关';
+                btn.className = 'btn btn-outline btn-sm';
+                if (debugAutoRefreshTimer) clearInterval(debugAutoRefreshTimer);
+            }
+        }
+
+        async function exportDebugLogs() {
+            try {
+                const logs = await eel.get_full_logs()();
+                const logPath = await eel.get_log_path()();
+                const blob = new Blob([logs], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'dutybot_debug_' + new Date().toISOString().slice(0, 10) + '.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('日志已导出', 'success');
+            } catch (err) {
+                showToast('导出失败: ' + err, 'error');
+            }
+        }
+
+        function clearDebugDisplay() {
+            const viewer = document.getElementById('debugLogViewer');
+            if (viewer) viewer.textContent = '';
+        }
+
+        function escapeHtml(str) { const d = document.createElement('div');
+            d.textContent = str; return d.innerHTML; }
+
+        function _fmtExcelDate(val) {
+            if (val == null || val === '') return '';
+            // Excel 日期序列号
+            if (typeof val === 'number' && val > 1 && val < 100000) {
+                const d = new Date((val - 25569) * 86400 * 1000);
+                return d.getFullYear() + '/' +
+                    String(d.getMonth() + 1).padStart(2, '0') + '/' +
+                    String(d.getDate()).padStart(2, '0');
+            }
+            // 字符串日期尝试转换
+            const s = val.toString().trim();
+            const match = s.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+            if (match) {
+                return match[1] + '/' + match[2].padStart(2, '0') + '/' + match[3].padStart(2, '0');
+            }
+            return s;
+        }
+
+        // 弹窗遮罩点击关闭
+        document.getElementById('addBotModalOverlay').addEventListener('click', function(e) { if (e.target === this)
+                closeAddBotModal(); });
+        document.getElementById('timingTaskModalOverlay').addEventListener('click', function(e) { if (e.target === this)
+                closeTimingTaskModal(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeAddBotModal();
+                closeTimingTaskModal(); } });
+
+        init();
+    </script>
+</body>
+</html>
