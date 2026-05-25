@@ -25,10 +25,8 @@ def _build_duty_markdown(table_id):
     records = DutyTableModel.get_records(conn, int(table_id))
     conn.close()
 
-    table_name = table['name'] if table else '值班表'
-
     if not records:
-        return f"## {table_name}\n\n暂无值班信息"
+        return f"## 值班信息通知\n\n暂无值班信息"
 
     today_str = date.today().strftime('%Y/%m/%d')
 
@@ -81,7 +79,7 @@ def send_duty_notification(bot_ids, table_id, at_all=False):
     conn = get_connection()
     table = DutyTableModel.get_by_id(conn, int(table_id))
     conn.close()
-    title = table['name'] if table else '值班通知'
+    title = '值班信息通知'
     return _send_to_bots(
         bot_ids=bot_ids,
         title=title,
