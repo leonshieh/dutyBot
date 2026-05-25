@@ -39,26 +39,29 @@ def _create_tray_image():
     return img
 
 
-def _run_eel_loop():
-    """循环启动 Eel：窗口关闭后自动重新打开，直到用户托盘退出"""
-    global _quit_app
-    while not _quit_app:
-        eel.init(_web_dir)
-        try:
-            eel.start(
-                'console.html',
-                mode='chrome',
-                size=(1280, 800),
-                port=0,
-                cmdline_args=['--disable-http-cache'],
-                block=True,
-            )
-        except SystemExit:
-            pass
-        except Exception as e:
-            logger.error(f"Eel 窗口异常: {e}")
-        if not _quit_app:
-            logger.info("窗口已关闭，定时任务继续运行（托盘常驻）")
+def _run_eel():
+    """启动 Eel 窗口（单次，关闭后不自动重开）"""
+    eel.init(_web_dir)
+    try:
+        eel.start(
+            'console.html',
+            mode='chrome',
+            size=(1280, 800),
+            port=0,
+            cmdline_args=['--disable-http-cache'],
+            block=True,
+        )
+    except SystemExit:
+        pass
+    except Exception as e:
+        logger.error(f"Eel 窗口异常: {e}")
+    if not _quit_app:
+        logger.info("窗口已关闭，定时任务继续运行（托盘常驻）")
+
+
+def _show_window(icon=None, item=None):
+    """托盘菜单：重新显示窗口"""
+    threading.Thread(target=_run_eel, daemon=True).start()
 
 
 def _quit_app_action(icon, item):
@@ -106,8 +109,8 @@ def main():
         threading.Thread(target=start_flask, daemon=True).start()
         logger.info(f"Flask: http://{APP_CONFIG['flask_host']}:{APP_CONFIG['flask_port']}")
 
-    # 首次启动 Eel 窗口（循环模式：关闭后自动重开）
-    threading.Thread(target=_run_eel_loop, daemon=True).start()
+    # 首次启动 Eel 窗口
+    threading.Thread(target=_run_eel, daemon=True).start()
 
     # 托盘图标
     icon = pystray.Icon(
@@ -115,6 +118,8 @@ def main():
         _create_tray_image(),
         '值班机器人',
         menu=pystray.Menu(
+            pystray.MenuItem('显示窗口', _show_window, default=True),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem('退出应用', _quit_app_action),
         ),
     )
