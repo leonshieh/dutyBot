@@ -168,9 +168,14 @@ def _send_to_bots(bot_ids, title, message, at_all, log_type, table_id=None):
                 timeout=APP_CONFIG['webhook_timeout'],
             )
             result = resp.json()
-            if resp.status_code != 200 or result.get('errcode') != 0:
+            # 兼容两种响应格式：标准钉钉 {"errcode":0} / 内网 {"success":true}
+            is_success = (
+                resp.status_code == 200 and
+                (result.get('errcode') == 0 or result.get('success') is True)
+            )
+            if not is_success:
                 all_success = False
-                last_error = result.get('errmsg', resp.text)[:200]
+                last_error = result.get('errmsg', str(result))[:200]
                 logger.error(f"发送到 {bot['name']} 失败: {last_error}")
             else:
                 logger.info(f"发送到 {bot['name']} 成功")
