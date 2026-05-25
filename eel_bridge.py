@@ -18,13 +18,31 @@ from scheduler_manager import add_job_for_task, remove_job_for_task, get_enabled
 from utils import read_recent_logs, read_full_logs, get_log_file_path
 
 
+def _fmt_created_at(created_at):
+    """将 SQLite UTC 时间转为本地时间"""
+    from datetime import datetime, timezone
+    if not created_at:
+        return ''
+    try:
+        utc_dt = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+        local_dt = utc_dt.astimezone()
+        return local_dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return created_at
+
+
 # ==================== 初始化数据 ====================
 
 @eel.expose
 def get_all_data():
     """前端初始化时获取全部数据"""
-    bots = get_all_bots()
-    tables = get_all_tables()
+    bots = [dict(b) for b in get_all_bots()]
+    for b in bots:
+        b['created_at'] = _fmt_created_at(b.get('created_at'))
+    tables = [dict(t) for t in get_all_tables()]
+    for t in tables:
+        t['created_at'] = _fmt_created_at(t.get('created_at'))
     duty_tasks = _get_tasks_for_frontend('duty')
     custom_tasks = _get_tasks_for_frontend('custom')
     duty_logs = _get_logs_for_frontend('duty')
@@ -211,29 +229,15 @@ def _get_tasks_for_frontend(task_type):
 
 def _get_logs_for_frontend(log_type):
     """获取日志（转为前端格式，时间转为本地时区）"""
-    from datetime import datetime, timezone, timedelta
     conn = get_connection()
     logs = SendLogModel.get_all(conn, log_type)
     conn.close()
 
-    def _fmt_time(sent_at):
-        """将 UTC 时间字符串转为本地时间显示"""
-        if not sent_at:
-            return ''
-        try:
-            # SQLite CURRENT_TIMESTAMP 格式: '2026-05-24 10:30:00'
-            utc_dt = datetime.strptime(sent_at, '%Y-%m-%d %H:%M:%S')
-            utc_dt = utc_dt.replace(tzinfo=timezone.utc)
-            local_dt = utc_dt.astimezone()
-            return local_dt.strftime('%Y-%m-%d %H:%M:%S')
-        except Exception:
-            return sent_at
-
     return [
         {
             'id': l['id'],
-            'time': _fmt_time(l['sent_at']),
-            'sent_at': _fmt_time(l['sent_at']),
+            'time': _fmt_created_at(l['sent_at']),
+            'sent_at': _fmt_created_at(l['sent_at']),
             'bot': l['bot_names'],
             'table': l['table_name'],
             'summary': l['message_summary'],

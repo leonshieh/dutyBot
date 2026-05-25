@@ -245,6 +245,7 @@
             color: #5a6d7e;
             text-align: center;
             letter-spacing: 0.3px;
+            flex-shrink: 0;
         }
 
         /* ========== MAIN CONTENT ========== */
@@ -983,6 +984,7 @@
             font-size: 11px;
             color: var(--text-muted);
             margin-top: 2px;
+            white-space: nowrap;
         }
         .file-item .file-actions {
             display: flex;
@@ -1059,7 +1061,7 @@
                 <span>调试日志</span>
             </div>
         </nav>
-        <div class="sidebar-footer">v1.1.0 · made by xiey_43</div>
+        <div class="sidebar-footer">V1.1.0 · made by xiey_43</div>
     </aside>
 
     <!-- ==================== MAIN CONTENT ==================== -->
@@ -1307,8 +1309,8 @@
             <div class="modal-body" style="max-height:500px;overflow-y:auto;font-size:13px;line-height:1.8;">
                 <p><strong>值班消息</strong>：选择机器人 + 值班表 + @所有人，点击「立即发送」推送今日值班和下次预告。可通过「+ 添加任务」创建定时发送。</p>
                 <p><strong>自定义消息</strong>：输入任意内容 + 选择机器人，支持全选/反选/取消，手动或定时发送。</p>
-                <p><strong>功能配置 → 机器人配置</strong>：管理钉钉 Webhook。切换外网/内网模式，输入 Access Token（无需完整地址）和加签 Secret。支持编辑和删除。</p>
-                <p><strong>功能配置 → 值班信息表</strong>：上传 .xlsx 值班表（第一列日期、第二列星期、第三列人员），解析预览后保存。日期自动转为 yyyy/mm/dd。</p>
+                <p><strong>功能配置 → 机器人配置</strong>：交融通->群设置->添加群助手->添加机器人->自定义->添加后选择加签，复制webhook地址中的access token和加签密钥粘贴。</p>
+                <p><strong>功能配置 → 值班信息表</strong>：编辑好文件后上传 .xlsx 值班表（第一列日期、第二列星期、第三列人员），解析预览后保存。日期自动转为 yyyy/mm/dd。</p>
                 <p><strong>定时任务</strong>：弹窗中选择机器人、发送内容、@所有人，设置时间和重复规则（每天/工作日/每周）。彩色标签展示任务摘要，开关控制启停。</p>
                 <p><strong>调试日志</strong>：查看后端运行日志，支持自动刷新和导出 TXT。</p>
                 <p><strong>系统托盘</strong>：关闭窗口后应用托盘常驻，定时任务持续运行。右键托盘图标退出。</p>
@@ -1320,6 +1322,31 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
+        // ============ 高分辨率屏幕自适应缩放 ============
+        (function() {
+            function calcZoom() {
+                const w = screen.width;
+                const dpr = window.devicePixelRatio || 1;
+                const effectiveW = w * dpr;
+                if (effectiveW >= 3840) return 1.4;       // 4K+
+                if (effectiveW >= 2560) return 1.2;       // 2K / Retina
+                if (w >= 1920 && dpr >= 2) return 1.1;    // FHD Retina
+                return 1;
+            }
+            function applyZoom(zoom) {
+                document.body.style.zoom = zoom > 1 ? String(zoom) : '';
+                // zoom 不改变视口单位，需手动修正 100vh 元素的高度
+                const h = zoom > 1 ? (window.innerHeight / zoom) + 'px' : '';
+                document.body.style.height = h;
+                const sidebar = document.querySelector('.sidebar');
+                if (sidebar) sidebar.style.height = h || '100vh';
+            }
+            applyZoom(calcZoom());
+            window.addEventListener('resize', function() {
+                applyZoom(calcZoom());
+            });
+        })();
+
         // ============ 全局数据 ============
         let botConfigs = [];
         let dutyTasks = [];
