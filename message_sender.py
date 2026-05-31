@@ -73,9 +73,11 @@ def _build_duty_markdown(table_id):
     return "\n".join(lines)
 
 
-def send_duty_notification(bot_ids, table_id, at_all=False):
-    """发送值班通知到指定机器人列表"""
+def send_duty_notification(bot_ids, table_id, at_all=False, custom_text=''):
+    """发送值班通知到指定机器人列表，可选拼接自定义文本"""
     message = _build_duty_markdown(table_id)
+    if custom_text and custom_text.strip():
+        message += '\n\n---\n\n' + custom_text.strip()
     conn = get_connection()
     table = DutyTableModel.get_by_id(conn, int(table_id))
     conn.close()
@@ -193,24 +195,6 @@ def _send_to_bots(bot_ids, title, message, at_all, log_type, table_id=None):
         table_name = table['name'] if table else ''
 
     # 记录发送日志
-    summary = message[:100].replace('\n', ' ')
-    SendLogModel.create(conn, {
-        'log_type': log_type,
-        'bot_names': '、'.join(bot_names),
-        'message_summary': summary,
-        'table_name': table_name,
-        'at_all': 1 if at_all else 0,
-        'status': 'success' if all_success else 'failed',
-        'error_message': last_error,
-    })
-    conn.commit()
-    conn.close()
-
-    return {
-        'success': all_success,
-        'bot_names': '、'.join(bot_names),
-        'error': last_error if not all_success else '',
-    }
     summary = message[:100].replace('\n', ' ')
     SendLogModel.create(conn, {
         'log_type': log_type,

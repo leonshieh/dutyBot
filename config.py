@@ -15,11 +15,6 @@ APP_CONFIG = {
     # 数据库路径
     'db_path': os.path.join(USER_DATA_DIR, 'dutybot.db'),
 
-    # Flask 配置（可选，默认关闭）
-    'enable_flask': False,
-    'flask_host': '127.0.0.1',
-    'flask_port': 5000,
-
     # 日志目录
     'log_dir': os.path.join(USER_DATA_DIR, 'logs'),
 

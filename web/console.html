@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>交融通机器人管理平台</title>
-    <!-- SheetJS 用于解析xlsx文件 -->
-    <script src="xlsx.full.min.js"></script>
     <!-- Eel JS 桥接库 — 由 Eel 框架自动提供 -->
     <script type="text/javascript" src="/eel.js"></script>
     <style>
@@ -124,6 +122,26 @@
             color: #8899aa;
             letter-spacing: 0.4px;
             font-weight: 400;
+        }
+
+        .btn-help-icon {
+            margin-left: auto;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: #8899aa;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition);
+            flex-shrink: 0;
+        }
+        .btn-help-icon:hover {
+            background: rgba(255,255,255,0.08);
+            color: #c0c8d0;
         }
 
         .sidebar-nav {
@@ -276,6 +294,45 @@
             color: var(--text-primary);
             letter-spacing: 0.2px;
         }
+
+        /* ========== TAB BAR ========== */
+        .tab-bar {
+            display: flex;
+            align-items: stretch;
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 0 8px;
+            gap: 2px;
+            min-height: 36px;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .tab-bar::-webkit-scrollbar { height: 2px; }
+        .tab-bar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+
+        .tab-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+            user-select: none;
+            transition: all var(--transition);
+        }
+        .tab-item:hover { color: var(--text-primary); background: #f8fafc; }
+        .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+        .tab-close {
+            width: 16px; height: 16px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; line-height: 1; color: var(--text-muted);
+            transition: all var(--transition);
+        }
+        .tab-close:hover { background: #e2e8f0; color: var(--danger); }
         .top-bar-breadcrumb {
             font-size: 12px;
             color: var(--text-muted);
@@ -660,13 +717,11 @@
             color: #fff;
             border-color: var(--success);
         }
-        .btn-stop {
-            background: var(--danger);
+        .btn-start {
+            background: var(--success);
             color: #fff;
-            border-color: var(--danger);
+            border-color: var(--success);
         }
-
-        /* ========== TABLE ========== */
         .table-wrapper {
             overflow-x: auto;
         }
@@ -868,12 +923,6 @@
             border-top: 1px dashed var(--border);
             margin: 4px 0;
         }
-        .card-send-area {
-            display: flex;
-            justify-content: flex-end;
-            padding-top: 4px;
-        }
-
         /* ========== TASK TAGS ========== */
         .task-tag {
             display: inline-block;
@@ -889,6 +938,18 @@
         .tag-content  { background: rgba(16,185,129,0.10); color: #059669; }
         .tag-at       { background: rgba(245,158,11,0.12); color: #d97706; }
         .tag-empty    { background: rgba(148,163,184,0.10); color: #94a3b8; }
+
+        /* workflow node tags */
+        .wf-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            border: 1px solid;
+            font-size: 11px;
+            font-weight: 500;
+            background: #fff;
+            white-space: nowrap;
+        }
 
         /* ========== TIMING TASK MODAL ========== */
         .timing-rule-options {
@@ -940,57 +1001,6 @@
             border-radius: 3px;
         }
 
-        /* ========== DUTY TABLE FILE LIST ========== */
-        .file-list {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .file-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 14px;
-            background: #fafcfd;
-            border: 1px solid var(--border-light);
-            border-radius: var(--radius);
-            transition: all var(--transition);
-        }
-        .file-item:hover {
-            background: #f1f5f9;
-        }
-        .file-item .file-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            background: var(--success-light);
-            color: #059669;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            flex-shrink: 0;
-        }
-        .file-item .file-info {
-            flex: 1;
-            min-width: 0;
-        }
-        .file-item .file-name {
-            font-weight: 600;
-            font-size: 13px;
-            color: var(--text-primary);
-        }
-        .file-item .file-meta {
-            font-size: 11px;
-            color: var(--text-muted);
-            margin-top: 2px;
-            white-space: nowrap;
-        }
-        .file-item .file-actions {
-            display: flex;
-            gap: 6px;
-        }
-
         /* ========== RESPONSIVE ========== */
         @media (max-width: 900px) {
             .sidebar {
@@ -1019,6 +1029,62 @@
                 padding: 12px;
             }
         }
+
+        /* ---- 侧边栏折叠 ---- */
+        .sidebar-collapsed {
+            width: 56px !important;
+            min-width: 56px !important;
+        }
+        .sidebar-collapsed .sidebar-title-group,
+        .sidebar-collapsed .sidebar-subtitle,
+        .sidebar-collapsed .btn-help-icon {
+            display: none !important;
+        }
+        .sidebar-collapsed .sidebar-header {
+            justify-content: center;
+            padding: 16px 10px 12px;
+        }
+        .sidebar-collapsed .nav-item span:not(.nav-icon) {
+            display: none !important;
+        }
+        .sidebar-collapsed .nav-item {
+            justify-content: center;
+            padding: 12px;
+        }
+        .sidebar-collapsed .nav-badge,
+        .sidebar-collapsed .sidebar-footer {
+            display: none !important;
+        }
+        .sidebar-collapsed .nav-arrow,
+        .sidebar-collapsed .nav-submenu {
+            display: none !important;
+        }
+
+        .sidebar-toggle-bar {
+            display: flex;
+            justify-content: center;
+            padding: 8px 0;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .sidebar-toggle-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: #5a6d7e;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition);
+            font-size: 14px;
+            line-height: 1;
+        }
+        .sidebar-toggle-btn:hover {
+            background: rgba(255,255,255,0.08);
+            color: #8899aa;
+        }
     </style>
 </head>
 <body>
@@ -1033,15 +1099,26 @@
                 <span class="sidebar-title">Bot控制台</span>
                 <span class="sidebar-subtitle">JRT Bot Console</span>
             </div>
+            <button class="btn-help-icon" onclick="openHelpModal()" title="使用说明">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </button>
         </div>
         <nav class="sidebar-nav">
-            <div class="nav-item active" data-panel="panel-duty-notify" onclick="switchPanel('panel-duty-notify', this)">
+            <div class="nav-item active" data-panel="panel-timing-tasks" onclick="openTab('panel-timing-tasks', '定时消息', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                <span>定时消息</span>
+            </div>
+            <div class="nav-item" data-panel="panel-duty-notify" onclick="openTab('panel-duty-notify', '值班消息', this)">
                 <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg></span>
                 <span>值班消息</span>
             </div>
-            <div class="nav-item" data-panel="panel-custom-msg" onclick="switchPanel('panel-custom-msg', this)">
+            <div class="nav-item" data-panel="panel-custom-msg" onclick="openTab('panel-custom-msg', '消息流', this)">
                 <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg></span>
-                <span>自定义消息</span>
+                <span>消息流</span>
+            </div>
+            <div class="nav-item" data-panel="panel-data-process" onclick="openTab('panel-data-process', '数据处理', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>
+                <span>数据处理</span>
             </div>
             <div class="nav-item nav-parent" onclick="toggleSubmenu(this)">
                 <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
@@ -1049,34 +1126,40 @@
                 <span class="nav-arrow">▾</span>
             </div>
             <div class="nav-submenu">
-                <div class="nav-item nav-sub" data-panel="panel-bot-config" onclick="switchPanel('panel-bot-config', this, true)">
+                <div class="nav-item nav-sub" data-panel="panel-bot-config" onclick="openTab('panel-bot-config', '机器人配置', this, true)">
                     <span>机器人配置</span>
                 </div>
-                <div class="nav-item nav-sub" data-panel="panel-duty-table" onclick="switchPanel('panel-duty-table', this, true)">
-                    <span>值班信息表</span>
+                <div class="nav-item nav-sub" data-panel="panel-file-upload" onclick="openTab('panel-file-upload', '表格上传', this, true)">
+                    <span>表格上传</span>
                 </div>
             </div>
-            <div class="nav-item" data-panel="panel-debug" onclick="switchPanel('panel-debug', this)">
+            <div class="nav-item" data-panel="panel-send-logs" onclick="openTab('panel-send-logs', '发送日志', this)">
+                <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></span>
+                <span>发送日志</span>
+            </div>
+            <div class="nav-item" data-panel="panel-debug" onclick="openTab('panel-debug', '调试日志', this)">
                 <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
                 <span>调试日志</span>
             </div>
         </nav>
-        <div class="sidebar-footer">V1.1.0 · made by xiey_43</div>
+        <div class="sidebar-toggle-bar">
+            <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="折叠侧边栏">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+            </button>
+        </div>
+        <div class="sidebar-footer">v1.1.0 · made by xiey_43</div>
     </aside>
 
     <!-- ==================== MAIN CONTENT ==================== -->
     <div class="main-content">
-        <div class="top-bar">
-            <span class="top-bar-title" id="topBarTitle">值班机器人通知</span>
-            <button class="btn btn-outline btn-sm" onclick="openHelpModal()" style="margin-left:auto;">使用说明</button>
-        </div>
+        <div class="tab-bar" id="tabBar"></div>
 
         <div class="content-area" id="contentArea">
 
             <!-- ========== 值班机器人通知面板 ========== -->
-            <div class="panel active" id="panel-duty-notify">
+            <div class="panel" id="panel-duty-notify">
                 <div class="card">
-                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>通知基本配置</span></div>
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>值班消息配置</span></div>
                     <div class="card-body">
                         <div class="form-group">
                             <label class="form-label">选择发送机器人 <span class="required">*</span> (可多选)
@@ -1091,14 +1174,16 @@
                                 <label class="form-label">值班信息表 <span class="required">*</span></label>
                                 <select id="dutyTableSelect" style="max-width:260px;">
                                     <option value="">-- 请选择值班信息表 --</option>
-                                    <option value="table1">本周值班表（技术部）</option>
-                                    <option value="table2">下周值班表（技术部）</option>
-                                    <option value="table3">本月值班总表</option>
                                 </select>
                             </div>
                         </div>
                         <hr class="card-divider">
-                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div class="form-group">
+                            <label class="form-label">附加消息 <span style="font-weight:400;color:var(--text-muted);">（可选，将拼接在值班信息后）</span></label>
+                            <textarea id="dutyCustomText" placeholder="输入要附加的自定义内容（支持 Markdown）..." style="min-height:60px;"></textarea>
+                        </div>
+                        <hr class="card-divider">
+                        <div style="display:flex;align-items:center;gap:16px;justify-content:space-between;">
                             <span class="toggle-wrapper">
                                 <label class="tg-wrap"><input type="checkbox" id="dutyAtAllToggle" onchange="updateToggleLabel(this,'dutyAtAllLabel')"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
                                 <span class="toggle-label" id="dutyAtAllLabel">@所有人</span>
@@ -1110,90 +1195,163 @@
 
                 <div class="card">
                     <div class="card-header">
-                        <span class="card-header-title"><span class="dot warning"></span>定时任务设置</span>
-                        <div style="display:flex;gap:8px;">
-                            <button class="btn btn-sm" id="dutyTimerBtn" onclick="toggleTimer('duty')">⏸ 调度已暂停</button>
-                            <button class="btn btn-outline btn-sm" onclick="addTimingTask('duty')">+ 添加任务</button>
-                        </div>
+                        <span class="card-header-title"><span class="dot warning"></span>值班消息任务列表</span>
+                        <button class="btn btn-outline btn-sm" onclick="addTimingTask('duty')">+ 添加任务</button>
                     </div>
                     <div class="card-body"><div class="task-list" id="dutyTaskList"></div></div>
                 </div>
+            </div>
 
-                <div class="card">
-                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>发送日志</span><div style="display:flex;gap:6px;"><button class="btn btn-outline btn-sm" onclick="reloadLogs().then(()=>showToast('日志已刷新','info'))">刷新</button><button class="btn btn-outline btn-sm" onclick="clearLogs('duty')">清空</button></div></div>
-                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>序号</th><th>发送时间</th><th>机器人</th><th>值班信息表</th><th>@所有人</th><th>状态</th></tr></thead><tbody id="dutyLogTableBody"></tbody></table></div></div>
+            <!-- ========== 消息流编排面板 ========== -->
+            <div class="panel" id="panel-custom-msg">
+                <div class="card" id="msgFlowCard">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>消息流编排</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-outline btn-sm" onclick="openMsgFlowPreviewModal()">预览</button>
+                            <button class="btn btn-test btn-sm" onclick="executeMsgFlow()">▶ 执行发送</button>
+                            <button class="btn btn-outline btn-sm" onclick="openSaveMsgFlowModal()">保存消息流</button>
+                        </div>
+                    </div>
+                    <div class="card-body"><div class="task-list" id="msgFlowStepList"></div></div>
+                    <div class="card-body" style="padding-top:0;display:flex;justify-content:center;">
+                        <button class="btn btn-outline" onclick="addMsgFlowStep()">+ 添加步骤</button>
+                    </div>
+                </div>
+
+                <div class="card" id="msgFlowListCard">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>已保存消息流</span></div>
+                    <div class="card-body"><div class="task-list" id="msgFlowList"></div></div>
                 </div>
             </div>
 
-            <!-- ========== 自定义消息通知面板 ========== -->
-            <div class="panel" id="panel-custom-msg">
+            <!-- ========== 定时任务面板 ========== -->
+            <div class="panel" id="panel-timing-tasks">
                 <div class="card">
-                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>消息内容配置</span></div>
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>定时消息配置</span></div>
                     <div class="card-body">
-                        <textarea id="customMessageText" placeholder="请输入要发送的消息内容..."></textarea>
                         <div class="form-group">
-                            <label class="form-label">选择发送机器人 <span class="required">*</span> (可多选)
-                                <button class="btn btn-outline btn-xs" onclick="selectAllBots('custom')" style="margin-left:8px;">全选</button>
-                                <button class="btn btn-outline btn-xs" onclick="invertBots('custom')" style="margin-left:4px;">反选</button>
-                                <button class="btn btn-outline btn-xs" onclick="clearAllBots('custom')" style="margin-left:4px;">取消</button>
-                            </label>
-                            <div class="checkbox-list" id="customBotCheckboxList"></div>
+                            <label class="form-label">选择发送机器人 <span class="required">*</span></label>
+                            <div class="checkbox-list" id="timingPanelBotCheckboxList"></div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">消息内容 <span class="required">*</span></label>
+                            <textarea id="timingPanelMessageText" style="min-height:80px;" placeholder="请输入要发送的消息内容..."></textarea>
+                        </div>
+                        <div class="form-row" style="align-items:flex-end;">
+                            <div class="form-group" style="max-width:140px;flex:0 0 auto;">
+                                <label class="form-label">执行时间 <span class="required">*</span></label>
+                                <input type="time" id="timingPanelTime" value="09:00">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label class="form-label" style="text-align:right;">重复规则 <span class="required">*</span></label>
+                                <div class="timing-rule-options" id="timingPanelRuleOptions" style="justify-content:flex-end;">
+                                    <div class="timing-rule-chip selected" data-rule="daily" data-label="每天" onclick="selectTimingPanelRule(this)">每天</div>
+                                    <div class="timing-rule-chip" data-rule="weekday" data-label="工作日" onclick="selectTimingPanelRule(this)">工作日</div>
+                                    <div class="timing-rule-chip" data-rule="weekly" data-label="每周" onclick="selectTimingPanelRule(this)">每周</div>
+                                </div>
+                                <div class="timing-rule-detail" id="timingPanelWeeklyDetail">
+                                    <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">选择星期：</span>
+                                    <div class="checkbox-list" id="timingPanelWeekdayCheckboxes">
+                                        <label class="checkbox-item"><input type="checkbox" value="1">周一</label>
+                                        <label class="checkbox-item"><input type="checkbox" value="2">周二</label>
+                                        <label class="checkbox-item"><input type="checkbox" value="3">周三</label>
+                                        <label class="checkbox-item"><input type="checkbox" value="4">周四</label>
+                                        <label class="checkbox-item"><input type="checkbox" value="5">周五</label>
+                                        <label class="checkbox-item"><input type="checkbox" value="6">周六</label>
+                                        <label class="checkbox-item"><input type="checkbox" value="0">周日</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <hr class="card-divider">
-                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div style="display:flex;align-items:center;gap:16px;justify-content:space-between;">
                             <span class="toggle-wrapper">
-                                <label class="tg-wrap"><input type="checkbox" id="customAtAllToggle" onchange="updateToggleLabel(this,'customAtAllLabel')"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
-                                <span class="toggle-label" id="customAtAllLabel">@所有人</span>
+                                <label class="tg-wrap"><input type="checkbox" id="timingPanelAtAllToggle" onchange="updateToggleLabel(this,'timingPanelAtAllLabel')"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
+                                <span class="toggle-label" id="timingPanelAtAllLabel">@所有人</span>
                             </span>
-                            <button class="btn btn-test" onclick="sendTest('custom')">立即发送</button>
+                            <button class="btn btn-test" onclick="addTimingTaskFromPanel()">添加</button>
                         </div>
                     </div>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <span class="card-header-title"><span class="dot warning"></span>定时任务设置</span>
-                        <div style="display:flex;gap:8px;">
-                            <button class="btn btn-sm" id="customTimerBtn" onclick="toggleTimer('custom')">⏸ 调度已暂停</button>
-                            <button class="btn btn-outline btn-sm" onclick="addTimingTask('custom')">+ 添加任务</button>
-                        </div>
+                        <span class="card-header-title"><span class="dot warning"></span>定时消息任务列表</span>
                     </div>
                     <div class="card-body"><div class="task-list" id="customTaskList"></div></div>
                 </div>
+            </div>
 
+            <!-- ========== 发送日志面板 ========== -->
+            <div class="panel" id="panel-send-logs">
                 <div class="card">
-                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>发送日志</span><div style="display:flex;gap:6px;"><button class="btn btn-outline btn-sm" onclick="reloadLogs().then(()=>showToast('日志已刷新','info'))">刷新</button><button class="btn btn-outline btn-sm" onclick="clearLogs('custom')">清空</button></div></div>
-                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>序号</th><th>发送时间</th><th>机器人</th><th>消息摘要</th><th>
-                        
-                    </th><th>状态</th></tr></thead><tbody id="customLogTableBody"></tbody></table></div></div>
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>发送日志</span><div style="display:flex;gap:6px;"><button class="btn btn-outline btn-sm" onclick="reloadLogs().then(()=>showToast('日志已刷新','info'))">刷新</button><button class="btn btn-outline btn-sm" onclick="clearAllLogs()">清空全部</button></div></div>
+                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>序号</th><th>发送时间</th><th>来源</th><th>机器人</th><th>内容摘要</th><th>@所有人</th><th>状态</th></tr></thead><tbody id="allLogTableBody"></tbody></table></div></div>
                 </div>
             </div>
 
-            <!-- ========== 值班信息表面板 ========== -->
-            <div class="panel" id="panel-duty-table">
+            <!-- ========== 表格上传面板 ========== -->
+            <div class="panel" id="panel-file-upload">
                 <div class="card">
-                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>上传值班表文件</span></div>
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>上传 Excel 文件</span></div>
                     <div class="card-body">
                         <div class="form-row">
-                            <input type="file" id="dutyFileInput" accept=".xlsx, .xls" style="flex:1;">
-                            <button class="btn btn-primary" onclick="parseDutyTable()">解析预览</button>
+                            <input type="file" id="dataFileInput" accept=".xlsx, .xls" style="flex:1;">
+                            <button class="btn btn-primary" onclick="uploadDataFile()">上传并解析</button>
                         </div>
-                        <div style="font-size:12px;color:var(--text-muted);">支持 .xlsx 格式，第一列日期，第二列星期，第三列值班人员，请先编辑好文件</div>
+                        <div class="form-row" style="align-items:flex-end;">
+                            <div class="form-group" style="max-width:140px;flex:0 0 auto;">
+                                <label class="form-label">表头行号</label>
+                                <input type="number" id="uploadHeaderRow" value="0" min="0" style="width:80px;" title="0=第一行作为表头">
+                            </div>
+                            <div class="form-group" style="max-width:140px;flex:0 0 auto;">
+                                <label class="form-label">跳过行数</label>
+                                <input type="number" id="uploadSkipRows" value="0" min="0" style="width:80px;" title="跳过表格前N行（合并标题行等）">
+                            </div>
+                            <span style="font-size:11px;color:var(--text-muted);">遇到合并单元格标题行？设置表头行号和跳过行数</span>
+                        </div>
+                        <div id="dataFileInfo" style="font-size:12px;color:var(--text-muted);display:none;"></div>
                     </div>
                 </div>
-                <div class="card" id="dutyPreviewCard" style="display:none;">
-                    <div class="card-header">
-                        <span class="card-header-title"><span class="dot success"></span>值班表预览</span>
-                        <div style="display:flex;gap:8px;align-items:center;">
-                            <span id="dutyTableStatus" style="font-size:12px;"></span>
-                            <button class="btn btn-primary btn-sm" id="dutyUploadBtn" onclick="uploadDutyTable()">上传保存</button>
+                <div class="card" id="dataResultCard" style="display:none;">
+                    <div class="card-header"><span class="card-header-title"><span class="dot success"></span>数据预览 <span id="dataRowCount" style="font-weight:400;color:var(--text-muted);"></span></span></div>
+                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead id="dataResultHead"></thead><tbody id="dataResultBody"></tbody></table></div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>已上传文件列表</span><button class="btn btn-outline btn-sm" onclick="refreshFileList()">刷新</button></div>
+                    <div class="card-body"><div class="task-list" id="uploadedFileList"><div class="task-empty">加载中...</div></div></div>
+                </div>
+            </div>
+
+            <!-- ========== 数据处理面板 ========== -->
+            <div class="panel" id="panel-data-process">
+                <div class="card">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>选择数据文件</span></div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <select id="dataFileSelect" style="max-width:320px;" onchange="onDataFileSelect(this.value)">
+                                <option value="">-- 请选择已上传的文件 --</option>
+                            </select>
+                            <span id="dataFileSelectInfo" style="font-size:12px;color:var(--text-muted);"></span>
                         </div>
                     </div>
-                    <div class="card-body no-padding"><div class="table-wrapper"><table><thead><tr><th>日期</th><th>星期</th><th>值班人员</th></tr></thead><tbody id="dutyPreviewBody"></tbody></table></div></div>
                 </div>
-                <div class="card" id="dutyFileListCard" style="display:none;">
-                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>已上传的值班文件</span></div>
-                    <div class="card-body"><div class="file-list" id="dutyFileList"></div></div>
+                <div class="card" id="dataWorkflowCard">
+                    <div class="card-header"><span class="card-header-title"><span class="dot warning"></span>数据流编排</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-outline btn-sm" onclick="openDataPreviewModal()">预览</button>
+                            <button class="btn btn-test btn-sm" onclick="executeDataWorkflow()">执行数据流</button>
+                            <button class="btn btn-outline btn-sm" onclick="openSaveWorkflowModal()">保存数据流</button>
+                        </div>
+                    </div>
+                    <div class="card-body"><div class="task-list" id="dataStepList"></div></div>
+                    <div class="card-body" style="padding-top:0;display:flex;justify-content:center;">
+                        <button class="btn btn-outline" onclick="addDataStep()">+ 添加步骤</button>
+                    </div>
+                </div>
+                <div class="card" id="dataWorkflowListCard">
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>已保存数据流</span></div>
+                    <div class="card-body"><div class="task-list" id="dataWorkflowList"></div></div>
                 </div>
             </div>
 
@@ -1240,6 +1398,10 @@
                     <select id="timingTableSelect" style="display:none;"><option value="">-- 请选择值班信息表 --</option></select>
                     <textarea id="timingMessageText" style="display:none;" placeholder="请输入要发送的消息内容..."></textarea>
                 </div>
+                <div class="form-group" id="timingCustomTextDiv" style="display:none;">
+                    <label class="form-label">附加消息 <span style="font-weight:400;color:var(--text-muted);">（可选）</span></label>
+                    <textarea id="timingCustomText" placeholder="输入要附加的自定义内容..." style="min-height:60px;"></textarea>
+                </div>
                 <div class="form-row">
                     <div class="form-group label-fixed" style="flex-direction:row;align-items:center;gap:10px;">
                         <label class="form-label" style="margin:0;">@所有人</label>
@@ -1279,6 +1441,54 @@
         </div>
     </div>
 
+    <!-- ==================== 消息预览弹窗 ==================== -->
+    <div class="modal-overlay hidden" id="msgFlowPreviewModalOverlay">
+        <div class="modal" style="max-width:640px;">
+            <div class="modal-header"><h3>消息预览</h3><button class="modal-close" onclick="closeMsgFlowPreviewModal()">✕</button></div>
+            <div class="modal-body" style="max-height:500px;overflow-y:auto;">
+                <pre id="msgFlowPreview" style="margin:0;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-all;color:var(--text-primary);">暂无消息内容，请添加步骤</pre>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeMsgFlowPreviewModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 数据处理预览弹窗 ==================== -->
+    <div class="modal-overlay hidden" id="dataPreviewModalOverlay">
+        <div class="modal" style="max-width:800px;">
+            <div class="modal-header"><h3>处理结果预览</h3><button class="modal-close" onclick="closeDataPreviewModal()">✕</button></div>
+            <div class="modal-body" style="max-height:500px;overflow-y:auto;padding:0;">
+                <div class="table-wrapper"><table><thead id="dataResultHead2"></thead><tbody id="dataResultBody2"></tbody></table></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeDataPreviewModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 保存消息流弹窗 ==================== -->
+    <div class="modal-overlay hidden" id="saveMsgFlowModalOverlay">
+        <div class="modal">
+            <div class="modal-header"><h3>保存消息流</h3><button class="modal-close" onclick="closeSaveMsgFlowModal()">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">消息流名称 <span class="required">*</span></label><input type="text" id="saveMsgFlowNameInput" placeholder="如：每周数据报告推送"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline" onclick="closeSaveMsgFlowModal()">取消</button><button class="btn btn-primary" onclick="confirmSaveMsgFlow()">确认保存</button></div>
+        </div>
+    </div>
+
+    <!-- ==================== 保存工作流弹窗 ==================== -->
+    <div class="modal-overlay hidden" id="saveWorkflowModalOverlay">
+        <div class="modal">
+            <div class="modal-header"><h3>保存工作流</h3><button class="modal-close" onclick="closeSaveWorkflowModal()">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">工作流名称 <span class="required">*</span></label><input type="text" id="saveWorkflowNameInput" placeholder="如：月度数据清洗"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline" onclick="closeSaveWorkflowModal()">取消</button><button class="btn btn-primary" onclick="confirmSaveWorkflow()">确认保存</button></div>
+        </div>
+    </div>
+
     <!-- ==================== 添加/编辑机器人弹窗 ==================== -->
     <div class="modal-overlay hidden" id="addBotModalOverlay">
         <div class="modal">
@@ -1307,13 +1517,14 @@
         <div class="modal">
             <div class="modal-header"><h3>使用说明</h3><button class="modal-close" onclick="closeHelpModal()">✕</button></div>
             <div class="modal-body" style="max-height:500px;overflow-y:auto;font-size:13px;line-height:1.8;">
-                <p><strong>值班消息</strong>：选择机器人 + 值班表 + @所有人，点击「立即发送」推送今日值班和下次预告。可通过「+ 添加任务」创建定时发送。</p>
-                <p><strong>自定义消息</strong>：输入任意内容 + 选择机器人，支持全选/反选/取消，手动或定时发送。</p>
-                <p><strong>功能配置 → 机器人配置</strong>：交融通->群设置->添加群助手->添加机器人->自定义->添加后选择加签，复制webhook地址中的access token和加签密钥粘贴。</p>
-                <p><strong>功能配置 → 值班信息表</strong>：编辑好文件后上传 .xlsx 值班表（第一列日期、第二列星期、第三列人员），解析预览后保存。日期自动转为 yyyy/mm/dd。</p>
-                <p><strong>定时任务</strong>：弹窗中选择机器人、发送内容、@所有人，设置时间和重复规则（每天/工作日/每周）。彩色标签展示任务摘要，开关控制启停。</p>
-                <p><strong>调试日志</strong>：查看后端运行日志，支持自动刷新和导出 TXT。</p>
-                <p><strong>系统托盘</strong>：关闭窗口后应用托盘常驻，定时任务持续运行。右键托盘图标退出。</p>
+                <p><strong>🎯 定时消息</strong>：选择发送机器人 → 输入消息内容 → 设置执行时间和重复规则（每天/工作日/每周）→ 可选 @所有人 → 点击添加。任务列表中通过开关控制启停，支持删除。</p>
+                <p><strong>📢 值班消息</strong>：选择发送机器人 + 值班信息表 + 可选附加消息 + @所有人 → 点击「立即发送」推送。可通过「+ 添加任务」创建定时值班通知。</p>
+                <p><strong>💬 消息流</strong>：以工作流方式编排复杂消息。添加「自定义文本」「数据处理结果」「发送消息」等步骤，串行拼接后一键发送。支持预览消息内容、保存消息流，下次加载后可更换文件复用。</p>
+                <p><strong>📊 数据处理</strong>：上传 Excel 文件 → 选择文件 → 编排数据处理步骤（分类筛选、文本/数值/日期/行列操作等）→ 执行后在弹窗中预览结果。支持保存数据流并复用。</p>
+                <p><strong>⚙️ 功能配置</strong>：管理钉钉 Webhook 机器人（切换外网/内网、输入 Access Token 和加签 Secret，支持编辑删除）和上传 Excel 文件。</p>
+                <p><strong>📨 发送日志</strong>：统一查看所有发送记录，按时间倒序排列，用彩色标签区分「值班消息」和「消息流」来源，支持清空全部日志。</p>
+                <p><strong>📝 调试日志</strong>：查看后端运行日志，支持自动刷新和导出 TXT 文件。</p>
+                <p><strong>🖥️ 系统托盘</strong>：关闭窗口后应用托盘常驻，定时任务持续运行。右键托盘图标可重新打开窗口或退出应用。侧边栏底部可折叠/展开。</p>
             </div>
             <div class="modal-footer"><button class="btn btn-primary" onclick="closeHelpModal()">知道了</button></div>
         </div>
@@ -1354,8 +1565,6 @@
         let dutyLogs = [];
         let customLogs = [];
         let dutyTableFiles = [];
-        let pendingDutyData = null;
-        let pendingDutyFileName = '';
         let pendingTimingTaskType = null;
         let editingBotId = null;
 
@@ -1396,97 +1605,112 @@
                     await new Promise(r => setTimeout(r, 500));
                 }
             }
-            refreshAllUI();
+            await refreshAllUI();
+            openTab('panel-timing-tasks', '定时任务', document.querySelector('[data-panel="panel-timing-tasks"]'));
             console.log('✅ 界面初始化完成');
         }
 
-        function refreshAllUI() {
+        async function refreshAllUI() {
             try {
                 renderBotConfigTable();
                 renderDutyBotCheckboxes();
-                renderCustomBotCheckboxes();
                 renderDutyTasks();
                 renderCustomTasks();
                 renderDutyLogs();
                 renderCustomLogs();
-                renderDutyFileList();
-                renderDutyTableSelect();
+                renderDutyTableSelect().catch(()=>{});
+                refreshFileList();
                 updateToggleLabel(document.getElementById('dutyAtAllToggle'), 'dutyAtAllLabel');
-                updateToggleLabel(document.getElementById('customAtAllToggle'), 'customAtAllLabel');
-                updateSchedulerButtons();
+                await updateSchedulerButtons();
             } catch (err) {
                 console.error('refreshAllUI 异常:', err);
             }
         }
 
-        async function updateSchedulerButtons() {
-            // 根据本地任务数据立即更新按钮状态
-            const dutyActive = dutyTasks.some(t => t.enabled);
-            const customActive = customTasks.some(t => t.enabled);
-            _setSchedulerButton('duty', dutyActive);
-            _setSchedulerButton('custom', customActive);
+        async function updateSchedulerButtons() {}
 
-            // 异步从后端获取精确状态
-            try {
-                const status = await eel.get_scheduler_status()();
-                _setSchedulerButton('duty', status.duty_enabled > 0);
-                _setSchedulerButton('custom', status.custom_enabled > 0);
-            } catch (err) {
-                // 后端不可用时使用本地状态
-            }
-        }
+        // ============ 标签页系统 ============
+        let tabs = [];
+        let activeTabId = null;
 
-        function _setSchedulerButton(type, active) {
-            const btnId = type === 'duty' ? 'dutyTimerBtn' : 'customTimerBtn';
-            const btn = document.getElementById(btnId);
-            if (!btn) return;
-            if (active) {
-                btn.textContent = '▶ 调度运行中';
-                btn.className = 'btn btn-sm';
-                btn.style.background = '#6495ED';
-                btn.style.color = '#fff';
-                btn.style.borderColor = '#6495ED';
-            } else {
-                btn.textContent = '⏸ 调度已暂停';
-                btn.className = 'btn btn-sm';
-                btn.style.background = '#f1f5f9';
-                btn.style.color = '#94a3b8';
-                btn.style.borderColor = '#e2e8f0';
-            }
-        }
-
-        // ============ 面板切换 ============
-        function switchPanel(panelId, navItem, isSub) {
+        function openTab(panelId, title, navItem, isSub) {
+            // 高亮侧边栏
             document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-            navItem.classList.add('active');
-            // 子菜单项选中时，同时高亮父级"功能配置"
-            if (isSub) {
-                const parent = navItem.closest('.nav-submenu')?.previousElementSibling;
-                if (parent && parent.classList.contains('nav-parent')) {
-                    parent.classList.add('active');
+            if (navItem) {
+                navItem.classList.add('active');
+                if (isSub) {
+                    const parent = navItem.closest('.nav-submenu')?.previousElementSibling;
+                    if (parent && parent.classList.contains('nav-parent')) parent.classList.add('active');
                 }
             }
+            // 如果标签已存在，激活它
+            const existing = tabs.find(t => t.id === panelId);
+            if (existing) {
+                activateTab(panelId);
+                return;
+            }
+            // 创建新标签
+            tabs.push({ id: panelId, title: title });
+            activeTabId = panelId;
+            renderTabs();
+            showPanel(panelId);
+        }
+
+        function activateTab(panelId) {
+            activeTabId = panelId;
+            renderTabs();
+            showPanel(panelId);
+        }
+
+        function closeTab(panelId, e) {
+            e.stopPropagation();
+            const idx = tabs.findIndex(t => t.id === panelId);
+            if (idx === -1) return;
+            tabs.splice(idx, 1);
+            if (activeTabId === panelId) {
+                activeTabId = tabs.length > 0 ? tabs[tabs.length - 1].id : null;
+            }
+            renderTabs();
+            if (activeTabId) showPanel(activeTabId);
+        }
+
+        function renderTabs() {
+            const bar = document.getElementById('tabBar');
+            if (tabs.length === 0) { bar.innerHTML = ''; return; }
+            bar.innerHTML = tabs.map(t => `
+                <div class="tab-item${t.id===activeTabId?' active':''}" onclick="activateTab('${t.id}')">
+                    <span>${t.title}</span>
+                    <span class="tab-close" onclick="closeTab('${t.id}',event)">×</span>
+                </div>
+            `).join('');
+        }
+
+        function showPanel(panelId) {
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            document.getElementById(panelId).classList.add('active');
-            const titles = {
-                'panel-duty-notify': { title: '值班机器人通知', breadcrumb: '通知管理' },
-                'panel-custom-msg': { title: '自定义消息通知', breadcrumb: '消息管理' },
-                'panel-duty-table': { title: '值班信息表', breadcrumb: '功能配置' },
-                'panel-bot-config': { title: '机器人配置', breadcrumb: '功能配置' },
-                'panel-debug': { title: '调试日志', breadcrumb: '运行日志' }
-            };
-            const info = titles[panelId] || { title: panelId, breadcrumb: '' };
-            document.getElementById('topBarTitle').textContent = info.title;
-            document.getElementById('topBarBreadcrumb').textContent = '/ ' + info.breadcrumb;
-            if (panelId === 'panel-duty-notify') renderDutyBotCheckboxes();
-            if (panelId === 'panel-custom-msg') renderCustomBotCheckboxes();
-            if (panelId === 'panel-duty-table') { renderDutyFileList();
-                renderDutyTableSelect(); }
+            const panel = document.getElementById(panelId);
+            if (panel) panel.classList.add('active');
+            if (panelId === 'panel-duty-notify') { renderDutyBotCheckboxes(); renderDutyTableSelect().catch(()=>{}); }
+            if (panelId === 'panel-custom-msg') { renderMsgFlowSteps(); loadMsgFlowList(); }
+            if (panelId === 'panel-timing-tasks') { renderTimingPanelBots(); renderCustomTasks(); }
+            if (panelId === 'panel-send-logs') { renderAllLogs(); }
+            if (panelId === 'panel-file-upload') { refreshFileList(); }
+            if (panelId === 'panel-data-process') { refreshDataFileSelect(); loadWorkflowList(); renderDataSteps(); }
             if (panelId === 'panel-debug') refreshDebugLogs();
-            else if (debugAutoRefreshTimer) { clearInterval(debugAutoRefreshTimer);
-                debugAutoRefresh = false;
-                const btn = document.getElementById('autoRefreshBtn'); if (btn) { btn.textContent = '自动刷新：关';
-                    btn.className = 'btn btn-outline btn-sm'; } }
+            else if (debugAutoRefreshTimer) { clearInterval(debugAutoRefreshTimer); debugAutoRefresh = false;
+                const btn = document.getElementById('autoRefreshBtn'); if (btn) { btn.textContent = '自动刷新：关'; btn.className = 'btn btn-outline btn-sm'; } }
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const btn = document.querySelector('.sidebar-toggle-btn');
+            const collapsed = sidebar.classList.toggle('sidebar-collapsed');
+            if (collapsed) {
+                btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>';
+                btn.title = '展开侧边栏';
+            } else {
+                btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>';
+                btn.title = '折叠侧边栏';
+            }
         }
 
         function toggleSubmenu(parent) {
@@ -1496,7 +1720,7 @@
             if (parent.nextElementSibling.classList.contains('open') && !parent.classList.contains('active')) {
                 const firstSub = parent.nextElementSibling.querySelector('.nav-sub');
                 if (firstSub && !document.querySelector('.nav-sub.active')) {
-                    switchPanel(firstSub.dataset.panel, firstSub, true);
+                    openTab(firstSub.dataset.panel, '机器人配置', firstSub, true);
                 }
             }
         }
@@ -1517,21 +1741,6 @@
         }
 
         // ============ 机器人多选复选框 (自定义消息) ============
-        function renderCustomBotCheckboxes() {
-            const container = document.getElementById('customBotCheckboxList');
-            if (!container) return;
-            container.innerHTML = botConfigs.map(bot => `
-                <label class="checkbox-item">
-                    <input type="checkbox" value="${bot.id}" class="custom-bot-checkbox">
-                    <span>${escapeHtml(bot.name)}</span>
-                </label>
-            `).join('');
-        }
-
-        function getSelectedCustomBotIds() {
-            return Array.from(document.querySelectorAll('.custom-bot-checkbox:checked')).map(cb => parseInt(cb.value));
-        }
-
         function selectAllBots(panel) {
             const cls = panel === 'duty' ? '.duty-bot-checkbox' : '.custom-bot-checkbox';
             document.querySelectorAll(cls).forEach(cb => { cb.checked = true; });
@@ -1640,6 +1849,7 @@
         // ============ 定时任务渲染与操作 ============
         function renderDutyTasks() {
             const container = document.getElementById('dutyTaskList');
+            if (!container) return;
             container.innerHTML = dutyTasks.length === 0 ?
                 '<div class="task-empty">暂无定时任务</div>' :
                 dutyTasks.map(t => `
@@ -1657,6 +1867,7 @@
 
         function renderCustomTasks() {
             const container = document.getElementById('customTaskList');
+            if (!container) return;
             container.innerHTML = customTasks.length === 0 ?
                 '<div class="task-empty">暂无定时任务</div>' :
                 customTasks.map(t => `
@@ -1685,6 +1896,9 @@
                     const table = dutyTableFiles.find(f => f.id == tableId);
                     if (table) tags.push(`<span class="task-tag tag-content">${escapeHtml(table.name || table.file_name || '值班表')}</span>`);
                 }
+                // 显示自定义附加文本（如果有）
+                const customText = t.message_text || t.messageText || '';
+                if (customText) tags.push(`<span class="task-tag tag-content">💬 ${escapeHtml(customText.length > 30 ? customText.slice(0, 30) + '...' : customText)}</span>`);
             } else {
                 const msg = t.message_text || t.messageText || '';
                 if (msg) tags.push(`<span class="task-tag tag-content">${escapeHtml(msg.length > 40 ? msg.slice(0, 40) + '...' : msg)}</span>`);
@@ -1725,6 +1939,8 @@
             // 重置发送内容
             document.getElementById('timingAtAllToggle').checked = false;
             updateToggleLabel(document.getElementById('timingAtAllToggle'), 'timingAtAllLabel');
+            const customEl = document.getElementById('timingCustomText');
+            if (customEl) customEl.value = '';
             _renderTimingBotCheckboxes();
             _renderTimingContent(type);
             document.getElementById('timingTaskModalOverlay').classList.remove('hidden');
@@ -1740,14 +1956,16 @@
             `).join('');
         }
 
-        function _renderTimingContent(type) {
+        async function _renderTimingContent(type) {
             const tableSel = document.getElementById('timingTableSelect');
             const msgText = document.getElementById('timingMessageText');
             const label = document.getElementById('timingContentLabel');
+            const customDiv = document.getElementById('timingCustomTextDiv');
             if (type === 'duty') {
                 label.textContent = '值班信息表 *';
                 tableSel.style.display = '';
                 msgText.style.display = 'none';
+                if (customDiv) customDiv.style.display = '';
                 tableSel.innerHTML = '<option value="">-- 请选择值班信息表 --</option>';
                 dutyTableFiles.forEach(f => {
                     const opt = document.createElement('option');
@@ -1755,10 +1973,25 @@
                     opt.textContent = (f.name || f.file_name) + ' (' + (f.record_count || f.recordCount || 0) + '条)';
                     tableSel.appendChild(opt);
                 });
+                try {
+                    const files = await eel.list_uploaded_files()();
+                    if (files && files.length > 0) {
+                        const grp = document.createElement('optgroup');
+                        grp.label = '已上传文件';
+                        files.forEach(f => {
+                            const opt = document.createElement('option');
+                            opt.value = 'upload:' + f.name;
+                            opt.textContent = f.name;
+                            grp.appendChild(opt);
+                        });
+                        tableSel.appendChild(grp);
+                    }
+                } catch (e) { /* 静默 */ }
             } else {
                 label.textContent = '消息内容 *';
                 tableSel.style.display = 'none';
                 msgText.style.display = '';
+                if (customDiv) customDiv.style.display = 'none';
                 msgText.value = '';
             }
         }
@@ -1794,6 +2027,9 @@
             if (pendingTimingTaskType === 'duty') {
                 table_id = document.getElementById('timingTableSelect').value;
                 if (!table_id) return showToast('请选择值班信息表', 'error');
+                // 自定义附加文本（可选）
+                const customEl = document.getElementById('timingCustomText');
+                if (customEl) message_text = customEl.value.trim();
             } else {
                 message_text = document.getElementById('timingMessageText').value.trim();
                 if (!message_text) return showToast('请输入消息内容', 'error');
@@ -1824,7 +2060,7 @@
                 rule_value: finalRuleValue,
                 bot_ids: botIds.join(','),
                 message_text: message_text,
-                table_id: table_id ? parseInt(table_id) : null,
+                table_id: table_id || null,
                 at_all: at_all ? 1 : 0,
             };
 
@@ -1840,33 +2076,42 @@
             }
         }
 
-        // 调度状态按钮：一键启停该类型所有定时任务
-        async function toggleTimer(type) {
-            const tasks = type === 'duty' ? dutyTasks : customTasks;
-            if (tasks.length === 0) return showToast('暂无定时任务，请先添加', 'info');
-            const anyEnabled = tasks.some(t => t.enabled);
-            const newEnabled = !anyEnabled;
-            try {
-                for (const t of tasks) {
-                    await eel.toggle_timing_task(t.id, newEnabled)();
-                }
-                await reloadData();
-                showToast(newEnabled ? '所有任务已启用' : '所有任务已暂停', 'success');
-            } catch (err) {
-                showToast('操作失败：' + err, 'error');
-            }
-        }
-
         // ============ 发送测试 ============
         async function sendTest(type) {
             if (type === 'duty') {
                 const botIds = getSelectedDutyBotIds();
                 const tableId = document.getElementById('dutyTableSelect').value;
                 const atAll = document.getElementById('dutyAtAllToggle').checked;
+                const customText = document.getElementById('dutyCustomText').value.trim();
                 if (botIds.length === 0) return showToast('请至少选择一个机器人', 'error');
                 if (!tableId) return showToast('请选择值班信息表', 'error');
                 try {
-                    const result = await eel.send_duty_notification_eel(botIds, tableId, atAll)();
+                    let result;
+                    if (tableId.startsWith('upload:')) {
+                        // 已上传文件：先校验是否为值班表格式，再加载发送
+                        const fileName = tableId.replace('upload:', '');
+                        const sel = await eel.select_uploaded_file(fileName)();
+                        if (!sel.success) return showToast('文件加载失败: ' + (sel.error || ''), 'error');
+                        if (!sel.columns || sel.columns.length < 3) return showToast('文件格式不符合值班表要求（至少需要日期、星期、人员三列）', 'error');
+                        // 校验第一列是否为日期格式，第二列是否为星期格式
+                        const prev = await eel.get_current_preview(1, 5)();
+                        if (prev.success && prev.data && prev.data.length > 0) {
+                            const firstVal = String(prev.data[0][0] || '');
+                            const secondVal = String(prev.data[0][1] || '');
+                            const datePattern = /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/;
+                            const weekdayPattern = /^(星期|周|周一|周二|周三|周四|周五|周六|周日|Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i;
+                            if (!datePattern.test(firstVal) && !weekdayPattern.test(secondVal)) {
+                                return showToast('文件格式不符合值班表要求（第一列需为日期、第二列需为星期）', 'error');
+                            }
+                        }
+                        const md = await eel.export_result_markdown()();
+                        if (!md.success) return showToast('导出失败: ' + md.error, 'error');
+                        let msg = `## 值班信息通知\n\n${md.markdown}`;
+                        if (customText) msg += '\n\n---\n\n' + customText;
+                        result = await eel.send_custom_message_eel(botIds, msg, atAll)();
+                    } else {
+                        result = await eel.send_duty_notification_eel(botIds, tableId, atAll, customText)();
+                    }
                     await reloadLogs();
                     showToast(result.success ? `发送成功 → ${result.bot_names}` : '发送失败: ' + (result.error || ''),
                         result.success ? 'success' : 'error');
@@ -1874,24 +2119,14 @@
                     showToast('发送异常：' + err, 'error');
                 }
             } else {
-                const botIds = getSelectedCustomBotIds();
-                const msg = document.getElementById('customMessageText').value.trim();
-                const atAll = document.getElementById('customAtAllToggle').checked;
-                if (botIds.length === 0) return showToast('请至少选择一个机器人', 'error');
-                if (!msg) return showToast('请输入消息内容', 'error');
-                try {
-                    const result = await eel.send_custom_message_eel(botIds, msg, atAll)();
-                    await reloadLogs();
-                    showToast(result.success ? `发送成功 → ${result.bot_names}` : '发送失败: ' + (result.error || ''),
-                        result.success ? 'success' : 'error');
-                } catch (err) {
-                    showToast('发送异常：' + err, 'error');
-                }
+                // 使用消息流编排发送
+                await executeMsgFlow();
             }
         }
 
         function renderDutyLogs() {
             const tbody = document.getElementById('dutyLogTableBody');
+            if (!tbody) return;
             const time = l => l.time || l.sent_at || '';
             const bot = l => l.bot || l.bot_names || '';
             const table = l => l.table || l.table_name || '';
@@ -1905,6 +2140,7 @@
 
         function renderCustomLogs() {
             const tbody = document.getElementById('customLogTableBody');
+            if (!tbody) return;
             const time = l => l.time || l.sent_at || '';
             const bot = l => l.bot || l.bot_names || '';
             const summary = l => l.summary || l.message_summary || '';
@@ -1916,10 +2152,44 @@
             `).join('');
         }
 
+        function renderAllLogs() {
+            const tbody = document.getElementById('allLogTableBody');
+            if (!tbody) return;
+            const time = l => l.time || l.sent_at || '';
+            const bot = l => l.bot || l.bot_names || '';
+            const atAll = l => l.atAll !== undefined ? l.atAll : l.at_all;
+            // 合并并添加来源标记，按时间倒序
+            const all = [];
+            dutyLogs.forEach(l => all.push({ ...l, _source: '值班消息', _summary: l.table || l.table_name || '' }));
+            customLogs.forEach(l => all.push({ ...l, _source: '消息流编排', _summary: l.summary || l.message_summary || '' }));
+            all.sort((a, b) => {
+                const ta = a.time || a.sent_at || '';
+                const tb = b.time || b.sent_at || '';
+                return tb.localeCompare(ta);
+            });
+            tbody.innerHTML = all.length === 0 ?
+                '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">暂无发送记录</td></tr>' :
+                all.map((l, i) => `
+                <tr><td>${i+1}</td><td>${escapeHtml(time(l))}</td><td><span class="badge ${l._source==='值班消息'?'badge-info':'badge-success'}" style="font-size:10px;">${l._source}</span></td><td>${escapeHtml(bot(l))}</td><td>${escapeHtml(l._summary)}</td><td>${atAll(l)?'是':'否'}</td><td><span class="badge ${l.status==='success'?'badge-success':'badge-error'}">${l.status==='success'?'成功':'失败'}</span></td></tr>
+            `).join('');
+        }
+
         function clearLogs(type) {
             if (!confirm('清空所有日志？')) return;
             eel.clear_send_logs(type)().then(() => reloadLogs()).catch(err => showToast('清空失败：' + err, 'error'));
             showToast('日志已清空', 'info');
+        }
+
+        async function clearAllLogs() {
+            if (!confirm('确定清空全部发送日志？此操作不可恢复！')) return;
+            try {
+                await eel.clear_send_logs('duty')();
+                await eel.clear_send_logs('custom')();
+                await reloadLogs();
+                showToast('全部日志已清空', 'info');
+            } catch (err) {
+                showToast('清空失败：' + err, 'error');
+            }
         }
 
         async function reloadLogs() {
@@ -1928,6 +2198,7 @@
                 customLogs = await eel.get_send_logs('custom')();
                 renderDutyLogs();
                 renderCustomLogs();
+                renderAllLogs();
             } catch (err) {
                 console.warn('刷新日志失败:', err);
             }
@@ -1942,121 +2213,44 @@
                 customTasks = data.custom_tasks || [];
                 dutyLogs = data.duty_logs || [];
                 customLogs = data.custom_logs || [];
-                refreshAllUI();
+                await refreshAllUI();
             } catch (err) {
                 console.warn('刷新数据失败:', err);
             }
         }
 
-        // ============ 值班表上传解析 ============
-        function parseDutyTable() {
-            const fileInput = document.getElementById('dutyFileInput');
-            const file = fileInput.files[0];
-            if (!file) return showToast('请选择文件', 'error');
-            pendingDutyFileName = file.name;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.SheetNames[0];
-                    const sheet = workbook.Sheets[firstSheet];
-                    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-
-                    if (jsonData.length < 2) return showToast('表格至少需要包含标题行和一行数据', 'error');
-
-                    const header = jsonData[0];
-                    if (!header || header.length < 3 || !header[0] || !header[1] || !header[2]) {
-                        return showToast('格式错误：前三列必须为日期、星期、值班人员', 'error');
-                    }
-
-                    const rows = jsonData.slice(1).filter(row => row.some(cell => cell !== ''));
-                    pendingDutyData = rows.map(row => ({
-                        date: _fmtExcelDate(row[0]),
-                        weekday: row[1]?.toString().trim() || '',
-                        person: row[2]?.toString().trim() || ''
-                    }));
-
-                    if (pendingDutyData.length === 0) return showToast('未解析到有效数据', 'error');
-
-                    renderDutyPreview(pendingDutyData);
-                    showToast(`成功解析 ${pendingDutyData.length} 条值班记录`, 'success');
-                } catch (err) {
-                    showToast('文件解析失败：' + err.message, 'error');
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        async function uploadDutyTable() {
-            if (!pendingDutyData || pendingDutyData.length === 0) return showToast('请先解析值班表', 'error');
-            try {
-                const result = await eel.save_duty_table_from_frontend(pendingDutyFileName, pendingDutyData)();
-                if (result.success) {
-                    await reloadData();
-                    showToast(`值班表「${result.name}」已上传`, 'success');
-                } else {
-                    showToast(result.error || '上传失败', 'error');
-                }
-            } catch (err) {
-                showToast('上传失败：' + err, 'error');
-            }
-        }
-
-        function renderDutyTableSelect() {
+        async function renderDutyTableSelect() {
             const sel = document.getElementById('dutyTableSelect');
             if (!sel) return;
             const cur = sel.value;
             sel.innerHTML = '<option value="">-- 请选择值班信息表 --</option>';
+            // 原有值班表
             dutyTableFiles.forEach(f => {
                 const opt = document.createElement('option');
                 opt.value = f.id;
                 opt.textContent = f.name + ' (' + (f.record_count || f.recordCount || 0) + '条)';
                 sel.appendChild(opt);
             });
-            if (cur && dutyTableFiles.some(f => f.id == cur)) sel.value = cur;
-        }
-
-        function renderDutyFileList() {
-            const card = document.getElementById('dutyFileListCard');
-            const container = document.getElementById('dutyFileList');
-            if (dutyTableFiles.length === 0) {
-                card.style.display = 'none';
-                return;
-            }
-            card.style.display = 'block';
-            const recordCount = f => f.record_count || f.recordCount || 0;
-            const uploadTime = f => f.created_at || f.uploadTime || '';
-            container.innerHTML = dutyTableFiles.map(f => `
-                <div class="file-item">
-                    <div class="file-icon">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    </div>
-                    <div class="file-info">
-                        <div class="file-name">${escapeHtml(f.name || f.file_name)}</div>
-                        <div class="file-meta">${recordCount(f)} 条记录 · ${escapeHtml(uploadTime(f))}</div>
-                    </div>
-                    <div class="file-actions">
-                        <button class="btn btn-outline btn-xs" onclick="previewDutyFile(${f.id})">预览</button>
-                        <button class="btn btn-danger btn-xs" onclick="deleteDutyFile(${f.id})">删除</button>
-                    </div>
-                </div>
-            `).join('');
+            // 已上传的 Excel 文件
+            try {
+                const files = await eel.list_uploaded_files()();
+                if (files && files.length > 0) {
+                    const grp = document.createElement('optgroup');
+                    grp.label = '已上传文件';
+                    files.forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = 'upload:' + f.name;
+                        opt.textContent = f.name;
+                        grp.appendChild(opt);
+                    });
+                    sel.appendChild(grp);
+                }
+            } catch (e) { /* 静默 */ }
+            if (cur && [...sel.options].some(o => o.value == cur)) sel.value = cur;
         }
 
         async function previewDutyFile(id) {
-            try {
-                const records = await eel.get_duty_records(id)();
-                renderDutyPreview(records.map(r => ({
-                    date: _fmtExcelDate(r.duty_date || r.date),
-                    weekday: r.weekday,
-                    person: r.person,
-                })));
-                document.getElementById('dutyPreviewCard').scrollIntoView({ behavior: 'smooth' });
-            } catch (err) {
-                showToast('加载失败：' + err, 'error');
-            }
+            showToast('预览功能已迁移到表格上传面板', 'info');
         }
 
         async function deleteDutyFile(id) {
@@ -2068,21 +2262,6 @@
             } catch (err) {
                 showToast('删除失败：' + err, 'error');
             }
-        }
-
-        function renderDutyPreview(data) {
-            const card = document.getElementById('dutyPreviewCard');
-            const tbody = document.getElementById('dutyPreviewBody');
-            const statusSpan = document.getElementById('dutyTableStatus');
-            card.style.display = 'block';
-            statusSpan.textContent = `共 ${data.length} 条记录`;
-            tbody.innerHTML = data.map(row => `
-                <tr>
-                    <td>${escapeHtml(row.date)}</td>
-                    <td>${escapeHtml(row.weekday)}</td>
-                    <td><strong>${escapeHtml(row.person)}</strong></td>
-                </tr>
-            `).join('');
         }
 
         // ============ 辅助函数 ============
@@ -2186,8 +2365,786 @@
                 closeTimingTaskModal(); });
         document.getElementById('helpModalOverlay').addEventListener('click', function(e) { if (e.target === this)
                 closeHelpModal(); });
+        document.getElementById('saveWorkflowModalOverlay').addEventListener('click', function(e) { if (e.target === this)
+                closeSaveWorkflowModal(); });
+        document.getElementById('saveMsgFlowModalOverlay').addEventListener('click', function(e) { if (e.target === this)
+                closeSaveMsgFlowModal(); });
+        document.getElementById('msgFlowPreviewModalOverlay').addEventListener('click', function(e) { if (e.target === this)
+                closeMsgFlowPreviewModal(); });
+        document.getElementById('dataPreviewModalOverlay').addEventListener('click', function(e) { if (e.target === this)
+                closeDataPreviewModal(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeAddBotModal();
-                closeTimingTaskModal(); closeHelpModal(); } });
+                closeTimingTaskModal(); closeHelpModal(); closeSaveWorkflowModal(); closeSaveMsgFlowModal(); closeMsgFlowPreviewModal(); closeDataPreviewModal(); } });
+
+        // ============ 数据处理工作流 ============
+        let dataSteps = [];
+        let dataColumns = [];
+        let dataWorkflows = [];
+        const DATA_NODE_CATEGORIES = {
+            '文本操作': { text_filter: '文本筛选', text_replace: '文本替换', text_slice: '文本截取', text_trim: '去除空格', text_case: '大小写转换', regex_extract: '正则提取' },
+            '数值操作': { num_filter: '数值筛选', num_arithmetic: '四则运算', num_round: '数值取整', num_aggregate: '聚合计算' },
+            '日期操作': { date_format: '日期格式化', date_extract: '日期提取', date_filter: '日期筛选' },
+            '列操作': { col_delete: '删除列', col_rename: '重命名列', col_split: '拆分列', col_merge: '合并列', col_calc: '跨列计算' },
+            '行操作': { row_dedup: '去重', row_sort: '排序', row_fillna: '空值填充' },
+            '高级操作': { group_agg: '分组聚合', pivot: '透视表' }
+        };
+
+        async function uploadDataFile() {
+            const fileInput = document.getElementById('dataFileInput');
+            const file = fileInput.files[0];
+            if (!file) return showToast('请选择 Excel 文件', 'error');
+            try {
+                const buf = await file.arrayBuffer();
+                const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
+                const headerRow = document.getElementById('uploadHeaderRow').value || '0';
+                const skipRows = document.getElementById('uploadSkipRows').value || '0';
+                const result = await eel.upload_excel(file.name, b64, headerRow, skipRows)();
+                if (result.success) {
+                    dataColumns = result.columns;
+                    dataSteps = [];
+                    document.getElementById('dataFileInfo').style.display = '';
+                    document.getElementById('dataFileInfo').textContent = `已加载: ${result.file_name} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    document.getElementById('dataResultCard').style.display = '';
+                    const prev = await eel.get_current_preview(1, 20)();
+                    if (prev.success) _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, 'dataRowCount', prev.page, prev.total_pages);
+                    refreshFileList();
+                    showToast(`已解析 ${result.row_count} 行数据`, 'success');
+                } else {
+                    showToast(result.error || '上传失败', 'error');
+                }
+            } catch (err) {
+                showToast('上传失败: ' + err, 'error');
+            }
+        }
+
+        async function refreshFileList() {
+            try {
+                const files = await eel.list_uploaded_files()();
+                const container = document.getElementById('uploadedFileList');
+                let html = '';
+                // 已上传的 Excel 文件
+                if (files && files.length > 0) {
+                    html += files.map(f => `
+                        <div class="task-item">
+                            <span style="flex:1;font-weight:600;"> ${escapeHtml(f.name)}</span>
+                            <span style="font-size:11px;color:var(--text-muted);">${f.row_count||'?'} 行 · ${f.mtime}</span>
+                            <button class="btn btn-ghost btn-xs" onclick="reparseUploadedFile('${escapeHtml(f.name)}')" title="调整表头行/跳过行" style="font-size:14px;padding:3px 6px;">⚙</button>
+                            <button class="btn btn-outline btn-xs" onclick="previewUploadedFile('${escapeHtml(f.name)}')">预览</button>
+                            <button class="btn btn-danger btn-xs" onclick="deleteUploadedFile('${escapeHtml(f.name)}')">删除</button>
+                        </div>
+                    `).join('');
+                }
+                // 原有值班表（SQLite）
+                if (dutyTableFiles.length > 0) {
+                    html += dutyTableFiles.map(f => {
+                        const uploadTime = f.created_at || f.uploadTime || '';
+                        const cnt = f.record_count || f.recordCount || 0;
+                        return `
+                        <div class="task-item">
+                            <span style="flex:1;font-weight:600;">📋 ${escapeHtml(f.name || f.file_name)}</span>
+                            <span style="font-size:11px;color:var(--text-muted);">${cnt} 条 · ${escapeHtml(uploadTime)}</span>
+                            <button class="btn btn-outline btn-xs" onclick="previewDutyFile(${f.id})">预览</button>
+                            <button class="btn btn-danger btn-xs" onclick="deleteDutyFile(${f.id})">删除</button>
+                        </div>`;
+                    }).join('');
+                }
+                container.innerHTML = html || '<div class="task-empty">暂无已上传的文件</div>';
+            } catch (err) { /* 静默 */ }
+        }
+
+        async function deleteUploadedFile(fileName) {
+            if (!confirm(`确定删除文件「${fileName}」？`)) return;
+            try {
+                await eel.delete_uploaded_file(fileName)();
+                refreshFileList();
+                showToast(`文件「${fileName}」已删除`, 'info');
+            } catch (err) { showToast('删除失败: ' + err, 'error'); }
+        }
+
+        async function reparseUploadedFile(fileName) {
+            const header = prompt('表头行号（0=第一行）：', '0');
+            if (header === null) return;
+            const skip = prompt('跳过前几行：', '0');
+            if (skip === null) return;
+            try {
+                const result = await eel.reparse_uploaded_file(fileName, header, skip)();
+                if (result.success) {
+                    dataColumns = result.columns;
+                    document.getElementById('dataFileInfo').style.display = '';
+                    document.getElementById('dataFileInfo').textContent = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    document.getElementById('dataResultCard').style.display = '';
+                    const prev = await eel.get_current_preview(1, 20)();
+                    if (prev.success) _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, 'dataRowCount', prev.page, prev.total_pages);
+                    showToast(`已重新解析 ${fileName}`, 'success');
+                }
+            } catch (err) { showToast('重新解析失败: ' + err, 'error'); }
+        }
+
+        async function previewUploadedFile(fileName) {
+            try {
+                const result = await eel.select_uploaded_file(fileName)();
+                if (result.success) {
+                    dataColumns = result.columns;
+                    document.getElementById('dataFileInfo').style.display = '';
+                    document.getElementById('dataFileInfo').textContent = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    document.getElementById('dataResultCard').style.display = '';
+                    const prev = await eel.get_current_preview(1, 20)();
+                    if (prev.success) _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, 'dataRowCount', prev.page, prev.total_pages);
+                    showToast(`已加载 ${fileName}`, 'info');
+                }
+            } catch (err) { showToast('加载失败: ' + err, 'error'); }
+        }
+
+        async function refreshDataFileSelect() {
+            try {
+                const files = await eel.list_uploaded_files()();
+                const sel = document.getElementById('dataFileSelect');
+                if (!sel) return;
+                const cur = sel.value;
+                sel.innerHTML = '<option value="">-- 请选择已上传的文件 --</option>';
+                (files || []).forEach(f => {
+                    sel.innerHTML += `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`;
+                });
+                if (cur && (files || []).some(f => f.name === cur)) sel.value = cur;
+            } catch (err) { /* 静默 */ }
+        }
+
+        async function onDataFileSelect(fileName) {
+            const info = document.getElementById('dataFileSelectInfo');
+            if (!fileName) {
+                if (info) info.textContent = '';
+                dataColumns = [];
+                dataSteps = [];
+                renderDataSteps();
+                return;
+            }
+            try {
+                const result = await eel.select_uploaded_file(fileName)();
+                if (result.success) {
+                    dataColumns = result.columns;
+                    dataSteps = [];
+                    if (info) info.textContent = `${result.columns.length} 列 · ${result.row_count} 行`;
+                    renderDataSteps();
+                    showToast(`已选择 ${fileName}`, 'info');
+                } else {
+                    showToast(result.error, 'error');
+                }
+            } catch (err) { showToast('加载失败: ' + err, 'error'); }
+        }
+
+        function addDataStep() {
+            if (dataColumns.length === 0) return showToast('请先选择数据文件', 'error');
+            dataSteps.push({ type: 'text_filter', params: {} });
+            renderDataSteps();
+        }
+
+        function renderDataSteps() {
+            const container = document.getElementById('dataStepList');
+            if (dataSteps.length === 0) {
+                container.innerHTML = '<div class="task-empty">暂无步骤，点击「+ 添加步骤」开始编排</div>';
+                return;
+            }
+            container.innerHTML = dataSteps.map((step, i) => {
+                const catEntries = Object.entries(DATA_NODE_CATEGORIES);
+                // 找到当前步骤所属的分类
+                let curCat = catEntries[0][0];
+                for (const [cat, nodes] of catEntries) {
+                    if (step.type in nodes) { curCat = cat; break; }
+                }
+                // 仅当前分类的操作
+                const curNodes = DATA_NODE_CATEGORIES[curCat] || {};
+                const typeOpts = Object.entries(curNodes).map(([k, v]) => `<option value="${k}" ${step.type===k?'selected':''}>${v}</option>`).join('');
+                return `
+                <div class="task-item" style="flex-direction:column;align-items:stretch;gap:6px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-weight:600;color:var(--primary);">步骤${i+1}</span>
+                        <select onchange="updateStepCategory(${i}, this.value)" style="max-width:120px;">
+                            ${catEntries.map(([cat]) => `<option value="${cat}" ${cat===curCat?'selected':''}>${cat}</option>`).join('')}
+                        </select>
+                        <select onchange="updateStepType(${i}, this.value)" style="max-width:160px;" id="dataStepType${i}">
+                            ${typeOpts}
+                        </select>
+                        <button class="btn btn-danger btn-xs" onclick="removeDataStep(${i})">删除</button>
+                    </div>
+                    <div id="dataStepParams${i}" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+                </div>`;
+            }).join('');
+            dataSteps.forEach((step, i) => renderStepParams(i, step));
+        }
+
+        function updateStepCategory(idx, category) {
+            const sel = document.getElementById('dataStepType' + idx);
+            if (!sel) return;
+            const nodes = DATA_NODE_CATEGORIES[category];
+            if (!nodes) return;
+            sel.innerHTML = Object.entries(nodes).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+            const newType = Object.keys(nodes)[0];
+            dataSteps[idx].type = newType;
+            dataSteps[idx].params = {};
+            renderDataSteps();
+        }
+
+        async function renderStepParams(idx, step) {
+            const container = document.getElementById('dataStepParams' + idx);
+            if (!container) return;
+            try {
+                const types = await eel.get_workflow_node_types()();
+                const nt = types.find(t => t.type === step.type);
+                if (!nt) { container.innerHTML = ''; return; }
+                const isColParam = p => p.type === 'column_select' || ['column', 'columns', 'index', 'values', 'lookup_col', 'agg_col', 'group_cols', 'new_col'].includes(p.name) || (p.label && (p.label.includes('列') || p.label.includes('列名')));
+                // 过滤：date_filter 的 date2 仅在 between 时显示
+                const visibleParams = nt.params.filter(p => {
+                    if (step.type === 'date_filter' && p.name === 'date2' && step.params.operator !== '日期范围内' && step.params.operator !== 'between') return false;
+                    return true;
+                });
+                container.innerHTML = visibleParams.map(p => {
+                    if (isColParam(p)) {
+                        const required = p.required !== false;
+                        const opts = required ? '' : '<option value="">（可选）</option>';
+                        const curVal = step.params[p.name] !== undefined ? step.params[p.name] : '';
+                        return `<span style="font-size:12px;display:flex;align-items:center;gap:4px;">${p.label}: <select onchange="updateStepParam(${idx},'${p.name}',this.value)" style="width:auto;padding:4px 6px;font-size:12px;">${opts}${dataColumns.map(c=>`<option value="${c}" ${curVal===c?'selected':''}>${c}</option>`).join('')}</select></span>`;
+                    }
+                    if (p.options && p.options.length > 0) {
+                        const curVal = step.params[p.name] !== undefined ? step.params[p.name] : (p.options[0] || '');
+                        return `<span style="font-size:12px;display:flex;align-items:center;gap:4px;">${p.label}: <select onchange="updateStepParam(${idx},'${p.name}',this.value)" style="width:auto;padding:4px 6px;font-size:12px;">${p.options.map(o=>`<option value="${o}" ${curVal===o?'selected':''}>${o}</option>`).join('')}</select></span>`;
+                    }
+                    const val = step.params[p.name] !== undefined ? step.params[p.name] : '';
+                    return `<span style="font-size:12px;display:flex;align-items:center;gap:4px;">${p.label}: <input type="text" value="${escapeHtml(String(val))}" onchange="updateStepParam(${idx},'${p.name}',this.value)" style="width:120px;padding:4px 6px;font-size:12px;" placeholder="${p.label}"></span>`;
+                }).join('');
+                // 自动填充未设置的必填参数默认值
+                nt.params.forEach(p => {
+                    if (step.params[p.name] === undefined) {
+                        if (isColParam(p) && p.required !== false && dataColumns.length > 0) {
+                            step.params[p.name] = dataColumns[0];
+                        } else if (p.options && p.options.length > 0) {
+                            step.params[p.name] = p.options[0];
+                        }
+                    }
+                });
+            } catch (e) {
+                container.innerHTML = '';
+            }
+        }
+
+        function updateStepType(idx, newType) {
+            dataSteps[idx].type = newType;
+            dataSteps[idx].params = {};
+            renderDataSteps();
+        }
+
+        function updateStepParam(idx, key, value) {
+            dataSteps[idx].params[key] = value;
+            // date_filter 切换筛选方式时重新渲染
+            if (dataSteps[idx].type === 'date_filter' && key === 'operator') {
+                renderDataSteps();
+            }
+        }
+
+        function removeDataStep(idx) {
+            dataSteps.splice(idx, 1);
+            renderDataSteps();
+        }
+
+        function openDataPreviewModal() {
+            document.getElementById('dataPreviewModalOverlay').classList.remove('hidden');
+        }
+        function closeDataPreviewModal() {
+            document.getElementById('dataPreviewModalOverlay').classList.add('hidden');
+        }
+
+        async function executeDataWorkflow() {
+            if (dataColumns.length === 0) return showToast('请先选择数据文件', 'error');
+            if (dataSteps.length === 0) return showToast('请先添加处理步骤', 'error');
+            const nodes = dataSteps.map((s, i) => ({ id: 'node_' + i, type: s.type, params: s.params }));
+            try {
+                const result = await eel.execute_data_workflow(nodes)();
+                if (result.success) {
+                    // 自动打开预览弹窗
+                    const prev = await eel.get_current_preview(1, 20)();
+                    if (prev.success) _renderTable('dataResultHead2', 'dataResultBody2', prev.columns, prev.data, prev.row_count, null, prev.page, prev.total_pages);
+                    openDataPreviewModal();
+                    if (result.errors && result.errors.length > 0) {
+                        const errMsgs = result.errors.map(e => `${e.node_type}: ${e.error}`).join('; ');
+                        showToast(`执行完成，${result.errors.length} 个错误: ${errMsgs}`, 'error');
+                    } else {
+                        showToast(`成功执行 ${result.executed_count}/${result.total_count} 个步骤`, 'success');
+                    }
+                } else {
+                    showToast(result.error || '执行失败', 'error');
+                }
+            } catch (err) {
+                showToast('执行失败: ' + err, 'error');
+            }
+        }
+
+        let _dataPage = {}; // {headId: currentPage}
+
+        function _renderTable(headId, bodyId, columns, data, rowCount, cntId, page, totalPages) {
+            const head = document.getElementById(headId);
+            const body = document.getElementById(bodyId);
+            if (head) head.innerHTML = '<tr>' + columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+            if (body) body.innerHTML = data.map(row => '<tr>' + row.map(v => `<td>${v!==null&&v!==undefined?escapeHtml(String(v)):'<span style=\"color:#94a3b8;\">-</span>'}</td>`).join('') + '</tr>').join('');
+            if (cntId) {
+                const el = document.getElementById(cntId);
+                if (el) {
+                    let info = `共 ${rowCount} 行`;
+                    if (totalPages && totalPages > 1) {
+                        _dataPage[headId] = page || 1;
+                        const pn = headId + '_pager';
+                        let pager = document.getElementById(pn);
+                        if (!pager) {
+                            pager = document.createElement('span');
+                            pager.id = pn;
+                            pager.style.cssText = 'margin-left:12px;display:inline-flex;align-items:center;gap:4px;font-weight:400;';
+                            el.parentElement.appendChild(pager);
+                        }
+                        const prevDisabled = page <= 1 ? 'disabled' : '';
+                        const nextDisabled = page >= totalPages ? 'disabled' : '';
+                        pager.innerHTML = `<button class="btn btn-xs btn-outline" ${prevDisabled} onclick="_goPage('${headId}',${page-1},'${cntId}')" style="padding:2px 8px;">上一页</button><span style="font-size:11px;">${page}/${totalPages}</span><button class="btn btn-xs btn-outline" ${nextDisabled} onclick="_goPage('${headId}',${page+1},'${cntId}')" style="padding:2px 8px;">下一页</button>`;
+                    }
+                    el.textContent = info;
+                }
+            }
+        }
+
+        async function _goPage(headId, page, cntId) {
+            // 判断是哪个表格（dataResult 或 dataResult2）
+            try {
+                const prev = await eel.get_current_preview(page, 20)();
+                if (prev.success) {
+                    if (headId === 'dataResultHead') {
+                        _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, cntId, prev.page, prev.total_pages);
+                    } else {
+                        _renderTable('dataResultHead2', 'dataResultBody2', prev.columns, prev.data, prev.row_count, null, prev.page, prev.total_pages);
+                    }
+                }
+            } catch (e) { /* 静默 */ }
+        }
+
+        function openSaveWorkflowModal() {
+            if (dataSteps.length === 0) return showToast('请先添加处理步骤', 'error');
+            document.getElementById('saveWorkflowNameInput').value = '';
+            document.getElementById('saveWorkflowModalOverlay').classList.remove('hidden');
+        }
+        function closeSaveWorkflowModal() {
+            document.getElementById('saveWorkflowModalOverlay').classList.add('hidden');
+        }
+        async function confirmSaveWorkflow() {
+            const name = document.getElementById('saveWorkflowNameInput').value.trim();
+            if (!name) return showToast('请输入工作流名称', 'error');
+            const nodes = dataSteps.map((s, i) => ({ id: 'node_' + i, type: s.type, params: s.params }));
+            try {
+                const result = await eel.save_workflow(name, nodes)();
+                if (result.success) {
+                    closeSaveWorkflowModal();
+                    await loadWorkflowList();
+                    showToast(`工作流「${name}」已保存`, 'success');
+                }
+            } catch (err) {
+                showToast('保存失败: ' + err, 'error');
+            }
+        }
+
+        async function loadWorkflowList() {
+            try {
+                dataWorkflows = await eel.load_workflows()();
+                const list = document.getElementById('dataWorkflowList');
+                if (!list) return;
+                // 构建节点标签的反向映射
+                const typeLabel = {};
+                for (const [cat, nodes] of Object.entries(DATA_NODE_CATEGORIES)) {
+                    for (const [k, v] of Object.entries(nodes)) {
+                        typeLabel[k] = v;
+                    }
+                }
+                const catColor = {
+                    '文本操作': '#27ae60', '数值操作': '#2980b9', '日期操作': '#e67e22',
+                    '列操作': '#8e44ad', '行操作': '#16a085', '高级操作': '#c0392b'
+                };
+                const getCat = t => { for (const [c, n] of Object.entries(DATA_NODE_CATEGORIES)) if (t in n) return c; return ''; };
+                list.innerHTML = dataWorkflows.length === 0
+                    ? '<div class="task-empty">暂无已保存的工作流</div>'
+                    : dataWorkflows.map((wf, i) => {
+                        const tags = wf.nodes.map(n => {
+                            const cat = getCat(n.type);
+                            const c = catColor[cat] || '#94a3b8';
+                            return `<span class="wf-tag" style="border-color:${c};color:${c};">${typeLabel[n.type]||n.type}</span>`;
+                        }).join('');
+                        return `
+                        <div class="task-item" style="flex-direction:column;align-items:stretch;gap:8px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span style="flex:1;font-weight:600;">${escapeHtml(wf.name)}</span>
+                                <span style="font-size:11px;color:var(--text-muted);">${wf.nodes.length} 步骤 · ${wf.created_at}</span>
+                                <button class="btn btn-outline btn-xs" onclick="applyWorkflow(${i})">加载</button>
+                                <button class="btn btn-danger btn-xs" onclick="deleteWorkflowByIndex(${i})">删除</button>
+                            </div>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap;">${tags}</div>
+                        </div>`;
+                    }).join('');
+            } catch (err) { /* 静默 */ }
+        }
+
+        function applyWorkflow(idx) {
+            const wf = dataWorkflows[idx];
+            if (!wf) return;
+            openTab('panel-data-process', '数据处理', document.querySelector('[data-panel="panel-data-process"]'));
+            dataSteps = wf.nodes.map(n => ({ type: n.type, params: n.params || {} }));
+            renderDataSteps();
+            showToast(`已加载工作流「${wf.name}」`, 'info');
+        }
+
+        async function deleteWorkflowByIndex(idx) {
+            const wf = dataWorkflows[idx];
+            if (!wf || !confirm(`确定删除工作流「${wf.name}」？`)) return;
+            try {
+                await eel.delete_workflow(wf.id)();
+                await loadWorkflowList();
+                showToast('工作流已删除', 'info');
+            } catch (err) {
+                showToast('删除失败: ' + err, 'error');
+            }
+        }
+
+        // ============ 消息流编排 ============
+        let msgFlowSteps = [];
+        let msgFlows = [];
+
+        const MSG_FLOW_NODE_TYPES = {
+            'msg_text': { label: '自定义文本', icon: '' },
+            'msg_data_process': { label: '数据处理结果', icon: '' },
+            'msg_send': { label: '发送消息', icon: '' },
+        };
+
+        function addMsgFlowStep() {
+            msgFlowSteps.push({ type: 'msg_text', params: { text: '' } });
+            renderMsgFlowSteps();
+        }
+
+        function renderMsgFlowSteps() {
+            const container = document.getElementById('msgFlowStepList');
+            if (!container) return;
+            if (msgFlowSteps.length === 0) {
+                container.innerHTML = '<div class="task-empty">暂无步骤，点击「+ 添加步骤」开始编排消息流</div>';
+                return;
+            }
+            container.innerHTML = msgFlowSteps.map((step, i) => {
+                const typeOpts = Object.entries(MSG_FLOW_NODE_TYPES).map(([k, v]) =>
+                    `<option value="${k}" ${step.type===k?'selected':''}>${v.icon} ${v.label}</option>`
+                ).join('');
+                return `
+                <div class="task-item" style="flex-direction:column;align-items:stretch;gap:8px;" id="msgStep${i}">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-weight:600;color:var(--primary);">步骤${i+1}</span>
+                        <select onchange="updateMsgStepType(${i}, this.value)" style="max-width:180px;">
+                            ${typeOpts}
+                        </select>
+                        <button class="btn btn-danger btn-xs" onclick="removeMsgStep(${i})">删除</button>
+                    </div>
+                    <div id="msgStepParams${i}" style="display:flex;flex-direction:column;gap:6px;"></div>
+                </div>`;
+            }).join('');
+            msgFlowSteps.forEach((step, i) => renderMsgStepParams(i, step));
+            updateMsgFlowPreview();
+        }
+
+        async function renderMsgStepParams(idx, step) {
+            const container = document.getElementById('msgStepParams' + idx);
+            if (!container) return;
+
+            if (step.type === 'msg_text') {
+                const val = step.params.text || '';
+                container.innerHTML = `<textarea placeholder="输入消息内容（支持 Markdown）" onchange="updateMsgStepParam(${idx},'text',this.value)" style="min-height:80px;width:100%;">${escapeHtml(val)}</textarea>`;
+            } else if (step.type === 'msg_data_process') {
+                // 获取已上传文件列表
+                let fileOpts = '<option value="">-- 选择文件 --</option>';
+                let wfOpts = '<option value="">-- 选择工作流 --</option>';
+                try {
+                    const files = await eel.list_uploaded_files()();
+                    (files || []).forEach(f => {
+                        const sel = step.params.file === f.name ? 'selected' : '';
+                        fileOpts += `<option value="${escapeHtml(f.name)}" ${sel}>${escapeHtml(f.name)} (${f.row_count||'?'}行)</option>`;
+                    });
+                    const wfs = await eel.load_workflows()();
+                    (wfs || []).forEach(wf => {
+                        const sel = step.params.workflow_id === wf.id ? 'selected' : '';
+                        wfOpts += `<option value="${wf.id}" ${sel}>${escapeHtml(wf.name)} (${wf.nodes.length}步骤)</option>`;
+                    });
+                } catch (e) { /* 静默 */ }
+                container.innerHTML = `
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <span style="font-size:12px;">文件:</span>
+                        <select onchange="updateMsgStepParam(${idx},'file',this.value)" style="max-width:240px;">${fileOpts}</select>
+                        <span style="font-size:12px;">工作流:</span>
+                        <select onchange="updateMsgStepParam(${idx},'workflow_id',this.value)" style="max-width:240px;">${wfOpts}</select>
+                    </div>`;
+                // 自动填充默认值
+                if (!step.params.file) {
+                    try {
+                        const files = await eel.list_uploaded_files()();
+                        if (files && files.length > 0) step.params.file = files[0].name;
+                    } catch (e) {}
+                }
+                if (!step.params.workflow_id) {
+                    try {
+                        const wfs = await eel.load_workflows()();
+                        if (wfs && wfs.length > 0) step.params.workflow_id = wfs[0].id;
+                    } catch (e) {}
+                }
+            } else if (step.type === 'msg_send') {
+                const botChecks = botConfigs.map(b => {
+                    const checked = (step.params.bot_ids || []).includes(b.id) ? 'checked' : '';
+                    return `<label class="checkbox-item"><input type="checkbox" value="${b.id}" ${checked} onchange="updateMsgStepBotIds(${idx})" class="msg-send-bot-${idx}">${escapeHtml(b.name)}</label>`;
+                }).join('');
+                const atChecked = step.params.at_all ? 'checked' : '';
+                container.innerHTML = `
+                    <div>
+                        <label style="font-size:12px;font-weight:600;color:var(--text-secondary);">选择发送机器人 <span style="color:var(--danger);">*</span></label>
+                        <div class="checkbox-list" style="margin-top:4px;">${botChecks}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span class="toggle-wrapper">
+                            <label class="tg-wrap"><input type="checkbox" ${atChecked} onchange="updateMsgStepParam(${idx},'at_all',this.checked)"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
+                            <span class="toggle-label">@所有人</span>
+                        </span>
+                    </div>`;
+            }
+        }
+
+        function updateMsgStepType(idx, newType) {
+            msgFlowSteps[idx].type = newType;
+            msgFlowSteps[idx].params = {};
+            renderMsgFlowSteps();
+        }
+
+        function updateMsgStepParam(idx, key, value) {
+            msgFlowSteps[idx].params[key] = value;
+            updateMsgFlowPreview();
+        }
+
+        function updateMsgStepBotIds(idx) {
+            const checked = document.querySelectorAll(`.msg-send-bot-${idx}:checked`);
+            msgFlowSteps[idx].params.bot_ids = Array.from(checked).map(cb => parseInt(cb.value));
+            updateMsgFlowPreview();
+        }
+
+        function removeMsgStep(idx) {
+            msgFlowSteps.splice(idx, 1);
+            renderMsgFlowSteps();
+        }
+
+        async function executeMsgFlow() {
+            if (msgFlowSteps.length === 0) return showToast('请先添加消息流步骤', 'error');
+            const nodes = msgFlowSteps.map((s, i) => ({ id: 'msg_' + i, type: s.type, params: { ...s.params } }));
+            try {
+                const result = await eel.execute_message_flow(nodes)();
+                await reloadLogs();
+                if (result.success) {
+                    const sentInfo = result.sent_result || {};
+                    showToast(`消息流执行成功 → ${sentInfo.bot_names || ''}`, 'success');
+                } else {
+                    const errMsgs = (result.errors || []).map(e => e.error).join('; ');
+                    showToast(`执行完成，有错误: ${errMsgs}`, 'error');
+                }
+            } catch (err) {
+                showToast('执行失败: ' + err, 'error');
+            }
+        }
+
+        // ---- 消息流保存/加载/删除 ----
+        function openSaveMsgFlowModal() {
+            if (msgFlowSteps.length === 0) return showToast('请先添加消息流步骤', 'error');
+            document.getElementById('saveMsgFlowNameInput').value = '';
+            document.getElementById('saveMsgFlowModalOverlay').classList.remove('hidden');
+        }
+        function closeSaveMsgFlowModal() {
+            document.getElementById('saveMsgFlowModalOverlay').classList.add('hidden');
+        }
+        async function confirmSaveMsgFlow() {
+            const name = document.getElementById('saveMsgFlowNameInput').value.trim();
+            if (!name) return showToast('请输入消息流名称', 'error');
+            const nodes = msgFlowSteps.map((s, i) => ({ id: 'msg_' + i, type: s.type, params: s.params }));
+            try {
+                const result = await eel.save_message_flow(name, nodes)();
+                if (result.success) {
+                    closeSaveMsgFlowModal();
+                    await loadMsgFlowList();
+                    showToast(`消息流「${name}」已保存`, 'success');
+                }
+            } catch (err) {
+                showToast('保存失败: ' + err, 'error');
+            }
+        }
+
+        async function loadMsgFlowList() {
+            try {
+                msgFlows = await eel.load_message_flows()();
+                const list = document.getElementById('msgFlowList');
+                if (!list) return;
+                const typeLabel = { msg_text: '自定义文本', msg_data_process: '数据流处理', msg_send: '发送消息' };
+                list.innerHTML = msgFlows.length === 0
+                    ? '<div class="task-empty">暂无已保存的消息流</div>'
+                    : msgFlows.map((mf, i) => {
+                        const tags = mf.nodes.map(n => {
+                            const label = typeLabel[n.type] || n.type;
+                            const color = n.type === 'msg_send' ? '#e67e22' : n.type === 'msg_data_process' ? '#8e44ad' : '#27ae60';
+                            return `<span class="wf-tag" style="border-color:${color};color:${color};">${label}</span>`;
+                        }).join('');
+                        return `
+                        <div class="task-item" style="flex-direction:column;align-items:stretch;gap:8px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span style="flex:1;font-weight:600;">${escapeHtml(mf.name)}</span>
+                                <span style="font-size:11px;color:var(--text-muted);">${mf.nodes.length} 步骤 · ${mf.created_at}</span>
+                                <button class="btn btn-outline btn-xs" onclick="applyMsgFlow(${i})">加载</button>
+                                <button class="btn btn-danger btn-xs" onclick="deleteMsgFlowByIndex(${i})">删除</button>
+                            </div>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap;">${tags}</div>
+                        </div>`;
+                    }).join('');
+            } catch (err) { /* 静默 */ }
+        }
+
+        function applyMsgFlow(idx) {
+            const mf = msgFlows[idx];
+            if (!mf) return;
+            openTab('panel-custom-msg', '消息流编排', document.querySelector('[data-panel="panel-custom-msg"]'));
+            msgFlowSteps = mf.nodes.map(n => ({ type: n.type, params: n.params || {} }));
+            renderMsgFlowSteps();
+            updateMsgFlowPreview();
+            showToast(`已加载消息流「${mf.name}」`, 'info');
+        }
+
+        async function deleteMsgFlowByIndex(idx) {
+            const mf = msgFlows[idx];
+            if (!mf || !confirm(`确定删除消息流「${mf.name}」？`)) return;
+            try {
+                await eel.delete_message_flow(mf.id)();
+                await loadMsgFlowList();
+                showToast('消息流已删除', 'info');
+            } catch (err) {
+                showToast('删除失败: ' + err, 'error');
+            }
+        }
+
+        // ============ 定时任务面板 ============
+        function renderTimingPanelBots() {
+            const container = document.getElementById('timingPanelBotCheckboxList');
+            if (!container) return;
+            container.innerHTML = botConfigs.map(bot => `
+                <label class="checkbox-item">
+                    <input type="checkbox" value="${bot.id}" class="timing-panel-bot-checkbox">
+                    <span>${escapeHtml(bot.name)}</span>
+                </label>
+            `).join('');
+        }
+
+        function selectTimingPanelRule(chip) {
+            document.querySelectorAll('#timingPanelRuleOptions .timing-rule-chip').forEach(c => c.classList.remove('selected'));
+            chip.classList.add('selected');
+            const rule = chip.dataset.rule;
+            const weeklyDetail = document.getElementById('timingPanelWeeklyDetail');
+            if (rule === 'weekly') {
+                weeklyDetail.classList.add('show');
+            } else {
+                weeklyDetail.classList.remove('show');
+            }
+        }
+
+        async function addTimingTaskFromPanel() {
+            const time = document.getElementById('timingPanelTime').value;
+            if (!time) return showToast('请设置执行时间', 'error');
+
+            const botIds = Array.from(document.querySelectorAll('.timing-panel-bot-checkbox:checked')).map(cb => parseInt(cb.value));
+            if (botIds.length === 0) return showToast('请至少选择一个机器人', 'error');
+
+            const message_text = document.getElementById('timingPanelMessageText').value.trim();
+            if (!message_text) return showToast('请输入消息内容', 'error');
+
+            const at_all = document.getElementById('timingPanelAtAllToggle').checked;
+
+            const selectedChip = document.querySelector('#timingPanelRuleOptions .timing-rule-chip.selected');
+            const ruleValue = selectedChip ? selectedChip.dataset.rule : 'daily';
+            const ruleLabel = selectedChip ? selectedChip.dataset.label : '每天';
+
+            let ruleDisplay = ruleLabel;
+            let finalRuleValue = ruleValue;
+
+            if (ruleValue === 'weekly') {
+                const checkedBoxes = document.querySelectorAll('#timingPanelWeekdayCheckboxes input:checked');
+                const checkedValues = Array.from(checkedBoxes).map(cb => cb.value);
+                const checkedLabels = Array.from(checkedBoxes).map(cb => ['日', '一', '二', '三', '四', '五', '六'][parseInt(cb.value)]);
+                if (checkedValues.length === 0) return showToast('请至少选择一个星期', 'error');
+                ruleDisplay = '每周' + checkedLabels.join('、');
+                finalRuleValue = 'weekly_' + checkedValues.join(',');
+            }
+
+            const taskData = {
+                task_type: 'custom',
+                exec_time: time,
+                rule: ruleDisplay,
+                rule_value: finalRuleValue,
+                bot_ids: botIds.join(','),
+                message_text: message_text,
+                table_id: null,
+                at_all: at_all ? 1 : 0,
+            };
+
+            try {
+                const result = await eel.add_timing_task(taskData)();
+                if (result.success) {
+                    await reloadData();
+                    // 重置表单
+                    document.getElementById('timingPanelTime').value = '09:00';
+                    document.getElementById('timingPanelAtAllToggle').checked = false;
+                    document.getElementById('timingPanelMessageText').value = '';
+                    document.querySelectorAll('#timingPanelRuleOptions .timing-rule-chip').forEach(c => c.classList.remove('selected'));
+                    const defaultChip = document.querySelector('#timingPanelRuleOptions .timing-rule-chip[data-rule="daily"]');
+                    if (defaultChip) defaultChip.classList.add('selected');
+                    document.getElementById('timingPanelWeeklyDetail').classList.remove('show');
+                    document.querySelectorAll('.timing-panel-bot-checkbox').forEach(cb => cb.checked = false);
+                    renderTimingPanelBots();
+                    showToast(`已添加定时任务：${time} ${ruleDisplay}`, 'success');
+                }
+            } catch (err) {
+                showToast('添加失败：' + err, 'error');
+            }
+        }
+
+        // ============ 消息流预览 ============
+        function openMsgFlowPreviewModal() {
+            updateMsgFlowPreview();
+            document.getElementById('msgFlowPreviewModalOverlay').classList.remove('hidden');
+        }
+        function closeMsgFlowPreviewModal() {
+            document.getElementById('msgFlowPreviewModalOverlay').classList.add('hidden');
+        }
+
+        function updateMsgFlowPreview() {
+            const preview = document.getElementById('msgFlowPreview');
+            if (!preview) return;
+            if (msgFlowSteps.length === 0) {
+                preview.textContent = '暂无消息内容，请添加步骤';
+                return;
+            }
+            let parts = [];
+            msgFlowSteps.forEach(s => {
+                if (s.type === 'msg_text') {
+                    const t = (s.params.text || '').trim();
+                    if (t) parts.push(t);
+                } else if (s.type === 'msg_data_process') {
+                    const file = s.params.file || '（未选择文件）';
+                    const wfId = s.params.workflow_id || '';
+                    parts.push(`[数据处理结果: ${file}]`);
+                } else if (s.type === 'msg_send') {
+                    const bots = (s.params.bot_ids || []).map(id => {
+                        const b = botConfigs.find(x => x.id === id);
+                        return b ? b.name : '#' + id;
+                    }).join(', ') || '（未选择机器人）';
+                    const atAll = s.params.at_all ? ' @所有人' : '';
+                    parts.push(`发送至: ${bots}${atAll}`);
+                }
+            });
+            preview.textContent = parts.join('\n\n') || '暂无消息内容';
+        }
 
         init();
     </script>

@@ -90,6 +90,26 @@ def init_database():
         )
     ''')
 
+    # ---- 数据处理工作流表 ----
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS workflows (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            nodes TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # ---- 消息流编排表 ----
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS message_flows (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            nodes TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     conn.commit()
 
     # ---- 首次初始化：插入默认机器人 ----

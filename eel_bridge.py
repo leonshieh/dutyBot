@@ -9,7 +9,6 @@ from duty_table_manager import (
     get_table_records,
     save_duty_table,
     delete_duty_table,
-    parse_xlsx_from_bytes,
 )
 from message_sender import send_duty_notification, send_custom_message
 from models import TimingTaskModel, SendLogModel
@@ -107,9 +106,9 @@ def remove_duty_table(table_id):
 # ==================== 消息发送 ====================
 
 @eel.expose
-def send_duty_notification_eel(bot_ids, table_id, at_all=False):
-    """发送值班通知"""
-    return send_duty_notification(bot_ids, table_id, at_all)
+def send_duty_notification_eel(bot_ids, table_id, at_all=False, custom_text=''):
+    """发送值班通知，可选拼接自定义文本"""
+    return send_duty_notification(bot_ids, table_id, at_all, custom_text)
 
 
 @eel.expose
@@ -268,6 +267,435 @@ def get_log_path():
     return get_log_file_path()
 
 
+# ==================== 数据处理工作流 ====================
+
+import json as _json
+import os as _os
+import base64 as _base64
+import uuid as _uuid
+import pandas as _pd
+from node_registry import NODE_REGISTRY
+from workflow_engine import execute_workflow
+
+_UPLOADS_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'uploads')
+_os.makedirs(_UPLOADS_DIR, exist_ok=True)
+
+# 内存中暂存当前上传的 DataFrame
+_current_df = None
+_current_file_name = None
+
+
+def _auto_convert_datetime_cols(df):
+    """自动将 DataFrame 中疑似日期的文本列转为 datetime"""
+    from node_registry import _parse_datetime_col
+    for col in df.columns:
+        dtype_str = str(df[col].dtype)
+        # 只处理文本类列（object/string/str）
+        if not any(t in dtype_str for t in ('object', 'string', 'str')):
+            continue
+        if len(df[col].dropna()) > 0:
+            sample = df[col].dropna().astype(str).head(20)
+            date_count = sample.str.match(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}').sum()
+            if date_count >= len(sample) * 0.5:
+                df[col] = _parse_datetime_col(df[col])
+
+
+@eel.expose
+def upload_excel(file_name, file_b64, header_row=None, skip_rows=None):
+    """上传 Excel 文件，返回列名列表（重名自动加序号）"""
+    global _current_df, _current_file_name
+    try:
+        file_bytes = _base64.b64decode(file_b64)
+        # 重名处理：追加序号
+        base, ext = _os.path.splitext(file_name)
+        final_name = file_name
+        counter = 1
+        while _os.path.exists(_os.path.join(_UPLOADS_DIR, final_name)):
+            final_name = f"{base}({counter}){ext}"
+            counter += 1
+        file_path = _os.path.join(_UPLOADS_DIR, final_name)
+        with open(file_path, 'wb') as f:
+            f.write(file_bytes)
+        header = int(header_row) if header_row is not None and int(header_row) >= 0 else 0
+        skip = int(skip_rows) if skip_rows is not None and int(skip_rows) >= 0 else 0
+        _current_df = _pd.read_excel(file_path, header=header, skiprows=skip)
+        _current_file_name = final_name
+        columns = _current_df.columns.tolist()
+        # 将整数列名转为字符串
+        columns = [str(c) for c in columns]
+        _current_df.columns = columns
+        # 自动检测日期列并转换
+        _auto_convert_datetime_cols(_current_df)
+        row_count = len(_current_df)
+        # 保存元数据
+        meta_path = file_path + '.meta.json'
+        with open(meta_path, 'w') as mf:
+            _json.dump({'row_count': row_count, 'header_row': header, 'skip_rows': skip}, mf)
+        return {'success': True, 'columns': columns, 'row_count': row_count, 'file_name': final_name}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+@eel.expose
+def execute_data_workflow(nodes):
+    """执行数据处理工作流，返回结果预览"""
+    global _current_df
+    if _current_df is None:
+        return {'success': False, 'error': '请先上传 Excel 文件'}
+    try:
+        result = execute_workflow(_current_df, nodes)
+        _current_df = result['result_df']
+        # 预览前 50 行
+        preview = result['result_df'].head(50)
+        for col in preview.columns:
+            if _pd.api.types.is_datetime64_any_dtype(preview[col]):
+                preview[col] = preview[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+        preview_clean = preview.astype(object).where(preview.notna(), None)
+        return {
+            'success': True,
+            'columns': preview_clean.columns.tolist(),
+            'data': preview_clean.values.tolist(),
+            'row_count': len(result['result_df']),
+            'errors': result['errors'],
+            'executed_count': result['executed_count'],
+            'total_count': result['total_count'],
+        }
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+@eel.expose
+def get_workflow_node_types():
+    """获取所有可用的节点类型及参数定义"""
+    types = []
+    for nt, info in NODE_REGISTRY.items():
+        schema = info.get('params_schema', {})
+        params = []
+        for name, cfg in schema.items():
+            params.append({
+                'name': name,
+                'label': cfg.get('label', name),
+                'type': cfg.get('type', 'str'),
+                'required': cfg.get('required', False),
+                'options': cfg.get('options', []),
+            })
+        types.append({'type': nt, 'params': params})
+    return types
+
+
+@eel.expose
+def save_workflow(name, nodes):
+    """保存工作流"""
+    if not name or not name.strip():
+        return {'success': False, 'error': '工作流名称不能为空'}
+    conn = get_connection()
+    wf_id = str(_uuid.uuid4())
+    conn.execute(
+        'INSERT INTO workflows (id, name, nodes) VALUES (?, ?, ?)',
+        (wf_id, name.strip(), _json.dumps(nodes, ensure_ascii=False))
+    )
+    conn.commit()
+    conn.close()
+    return {'success': True, 'id': wf_id, 'name': name.strip()}
+
+
+@eel.expose
+def load_workflows():
+    """获取所有已保存工作流"""
+    conn = get_connection()
+    rows = conn.execute('SELECT * FROM workflows ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return [{'id': r['id'], 'name': r['name'], 'nodes': _json.loads(r['nodes']), 'created_at': _fmt_created_at(r['created_at'])} for r in rows]
+
+
+@eel.expose
+def delete_workflow(wf_id):
+    """删除工作流"""
+    conn = get_connection()
+    conn.execute('DELETE FROM workflows WHERE id = ?', (str(wf_id),))
+    conn.commit()
+    conn.close()
+    return {'success': True}
+
+
+@eel.expose
+def export_result_markdown():
+    """将当前结果转为 Markdown 表格文本"""
+    global _current_df
+    if _current_df is None:
+        return {'success': False, 'error': '无数据可导出'}
+    try:
+        df = _current_df.head(50)
+        lines = []
+        # 表头
+        headers = '| ' + ' | '.join(str(c) for c in df.columns) + ' |'
+        lines.append(headers)
+        # 分隔线
+        sep = '| ' + ' | '.join('---' for _ in df.columns) + ' |'
+        lines.append(sep)
+        # 数据行
+        for _, row in df.iterrows():
+            cells = []
+            for v in row:
+                if v is None or (isinstance(v, float) and _pd.isna(v)):
+                    cells.append('')
+                else:
+                    cells.append(str(v).replace('|', '\\|'))
+            lines.append('| ' + ' | '.join(cells) + ' |')
+        return {'success': True, 'markdown': '\n'.join(lines), 'row_count': len(_current_df)}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+@eel.expose
+def list_uploaded_files():
+    """列出 uploads 目录下所有 xlsx 文件（按修改时间排序，最新在前）"""
+    files = []
+    if _os.path.exists(_UPLOADS_DIR):
+        items = []
+        for f in _os.listdir(_UPLOADS_DIR):
+            if f.endswith(('.xlsx', '.xls')) and not f.startswith('~'):
+                path = _os.path.join(_UPLOADS_DIR, f)
+                mtime = _os.path.getmtime(path)
+                items.append((f, path, mtime))
+        items.sort(key=lambda x: x[2], reverse=True)
+        from datetime import datetime
+        for f, path, mtime in items:
+            mtime_str = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+            row_count = 0
+            meta_path = path + '.meta.json'
+            if _os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r') as mf:
+                        meta = _json.load(mf)
+                        row_count = meta.get('row_count', 0)
+                except Exception:
+                    pass
+            files.append({'name': f, 'path': path, 'mtime': mtime_str, 'row_count': row_count})
+    return files
+
+
+@eel.expose
+def select_uploaded_file(file_name, header_row=None, skip_rows=None):
+    """选择已上传的文件，加载为当前 DataFrame"""
+    global _current_df, _current_file_name
+    path = _os.path.join(_UPLOADS_DIR, file_name)
+    if not _os.path.exists(path):
+        return {'success': False, 'error': f'文件不存在: {file_name}'}
+    try:
+        # 读取已有元数据获取默认值
+        meta_path = path + '.meta.json'
+        if header_row is None and _os.path.exists(meta_path):
+            try:
+                with open(meta_path, 'r') as mf:
+                    meta = _json.load(mf)
+                    header_row = meta.get('header_row', 0)
+                    skip_rows = meta.get('skip_rows', 0)
+            except Exception:
+                pass
+        header = int(header_row) if header_row is not None and int(header_row) >= 0 else 0
+        skip = int(skip_rows) if skip_rows is not None and int(skip_rows) >= 0 else 0
+        _current_df = _pd.read_excel(path, header=header, skiprows=skip)
+        _current_file_name = file_name
+        columns = _current_df.columns.tolist()
+        columns = [str(c) for c in columns]
+        _current_df.columns = columns
+        _auto_convert_datetime_cols(_current_df)
+        row_count = len(_current_df)
+        with open(meta_path, 'w') as mf:
+            _json.dump({'row_count': row_count, 'header_row': header, 'skip_rows': skip}, mf)
+        return {'success': True, 'columns': columns, 'row_count': row_count, 'file_name': file_name}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+@eel.expose
+def reparse_uploaded_file(file_name, header_row=0, skip_rows=0):
+    """重新解析已上传文件（更新表头/跳过行设置）"""
+    return select_uploaded_file(file_name, int(header_row), int(skip_rows))
+
+
+@eel.expose
+def delete_uploaded_file(file_name):
+    """删除已上传的 Excel 文件及其元数据"""
+    path = _os.path.join(_UPLOADS_DIR, file_name)
+    meta_path = path + '.meta.json'
+    deleted = False
+    if _os.path.exists(path):
+        _os.remove(path)
+        deleted = True
+    if _os.path.exists(meta_path):
+        _os.remove(meta_path)
+    if deleted:
+        return {'success': True}
+    return {'success': False, 'error': f'文件不存在: {file_name}'}
+
+
+@eel.expose
+def get_current_preview(page=1, page_size=20):
+    """获取当前处理结果预览（分页）"""
+    global _current_df
+    if _current_df is None:
+        return {'success': False, 'error': '无数据'}
+    total = len(_current_df)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * page_size
+    end = start + page_size
+    preview = _current_df.iloc[start:end]
+    # 将 datetime 列转为字符串，避免 JSON 序列化失败
+    for col in preview.columns:
+        if _pd.api.types.is_datetime64_any_dtype(preview[col]):
+            preview[col] = preview[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+    preview_clean = preview.astype(object).where(preview.notna(), None)
+    return {
+        'success': True,
+        'columns': preview_clean.columns.tolist(),
+        'data': preview_clean.values.tolist(),
+        'row_count': total,
+        'page': page,
+        'total_pages': total_pages,
+        'page_size': page_size,
+    }
+
+
 def register_all_exposures():
     """确保所有 @eel.expose 函数被注册（导入即注册，此函数为显式调用入口）"""
-    pass
+
+
+# ==================== 消息流编排 ====================
+
+@eel.expose
+def save_message_flow(name, nodes):
+    """保存消息流"""
+    if not name or not name.strip():
+        return {'success': False, 'error': '消息流名称不能为空'}
+    conn = get_connection()
+    wf_id = str(_uuid.uuid4())
+    conn.execute(
+        'INSERT INTO message_flows (id, name, nodes) VALUES (?, ?, ?)',
+        (wf_id, name.strip(), _json.dumps(nodes, ensure_ascii=False))
+    )
+    conn.commit()
+    conn.close()
+    return {'success': True, 'id': wf_id, 'name': name.strip()}
+
+
+@eel.expose
+def load_message_flows():
+    """获取所有已保存消息流"""
+    conn = get_connection()
+    rows = conn.execute('SELECT * FROM message_flows ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return [{'id': r['id'], 'name': r['name'], 'nodes': _json.loads(r['nodes']), 'created_at': _fmt_created_at(r['created_at'])} for r in rows]
+
+
+@eel.expose
+def delete_message_flow(flow_id):
+    """删除消息流"""
+    conn = get_connection()
+    conn.execute('DELETE FROM message_flows WHERE id = ?', (str(flow_id),))
+    conn.commit()
+    conn.close()
+    return {'success': True}
+
+
+@eel.expose
+def execute_message_flow(nodes):
+    """
+    执行消息流编排，串行执行节点，拼接文本后发送
+    节点类型：
+      - msg_text:     {type: "msg_text", params: {text: "..."}}
+      - msg_data_process: {type: "msg_data_process", params: {file: "filename.xlsx", workflow_id: "uuid"}}
+      - msg_send:     {type: "msg_send", params: {bot_ids: [1,2], at_all: bool}}  — 终端节点
+    返回: {success, message, errors[], sent_result}
+    """
+    global _current_df, _current_file_name
+    accumulated_text = ''
+    errors = []
+    sent_result = None
+    saved_df = _current_df
+    saved_file = _current_file_name
+
+    try:
+        for node in nodes:
+            nt = node.get('type', '')
+            params = node.get('params', {})
+
+            if nt == 'msg_text':
+                text = (params.get('text') or '').strip()
+                if text:
+                    if accumulated_text:
+                        accumulated_text += '\n\n'
+                    accumulated_text += text
+
+            elif nt == 'msg_data_process':
+                file_name = params.get('file', '').strip()
+                workflow_id = params.get('workflow_id', '').strip()
+                if not file_name:
+                    errors.append({'node_type': nt, 'error': '未选择文件'})
+                    continue
+                if not workflow_id:
+                    errors.append({'node_type': nt, 'error': '未选择数据处理工作流'})
+                    continue
+                # 加载工作流
+                conn = get_connection()
+                wf_row = conn.execute('SELECT * FROM workflows WHERE id = ?', (workflow_id,)).fetchone()
+                conn.close()
+                if not wf_row:
+                    errors.append({'node_type': nt, 'error': f'工作流不存在: {workflow_id}'})
+                    continue
+                wf_nodes = _json.loads(wf_row['nodes'])
+                # 加载文件
+                path = _os.path.join(_UPLOADS_DIR, file_name)
+                if not _os.path.exists(path):
+                    errors.append({'node_type': nt, 'error': f'文件不存在: {file_name}'})
+                    continue
+                try:
+                    df = _pd.read_excel(path)
+                    result = execute_workflow(df, wf_nodes)
+                    df_result = result['result_df']
+                    # 导出为 Markdown
+                    md_lines = []
+                    headers = '| ' + ' | '.join(str(c) for c in df_result.columns) + ' |'
+                    md_lines.append(headers)
+                    md_lines.append('| ' + ' | '.join('---' for _ in df_result.columns) + ' |')
+                    for _, row in df_result.head(50).iterrows():
+                        cells = [str(v).replace('|', '\\|') if v is not None and not (_pd.isna(v) if isinstance(v, float) else False) else '' for v in row]
+                        md_lines.append('| ' + ' | '.join(cells) + ' |')
+                    table_md = '\n'.join(md_lines)
+                    if accumulated_text:
+                        accumulated_text += '\n\n'
+                    accumulated_text += table_md
+                    if result.get('errors'):
+                        for e in result['errors']:
+                            errors.append({'node_type': nt, 'error': f"{e.get('node_type','')}: {e.get('error','')}"})
+                except Exception as e:
+                    errors.append({'node_type': nt, 'error': str(e)})
+
+            elif nt == 'msg_send':
+                bot_ids = params.get('bot_ids', [])
+                at_all = params.get('at_all', False)
+                if not bot_ids:
+                    errors.append({'node_type': nt, 'error': '未选择机器人'})
+                    continue
+                if not accumulated_text.strip():
+                    errors.append({'node_type': nt, 'error': '消息内容为空，请在前置步骤中添加文本或数据处理结果'})
+                    continue
+                try:
+                    sent_result = send_custom_message(bot_ids, accumulated_text, at_all)
+                except Exception as e:
+                    errors.append({'node_type': nt, 'error': f'发送失败: {e}'})
+                break  # 发送后终止
+
+    finally:
+        # 恢复原始 DataFrame
+        _current_df = saved_df
+        _current_file_name = saved_file
+
+    return {
+        'success': len(errors) == 0,
+        'message': accumulated_text,
+        'errors': errors,
+        'sent_result': sent_result,
+    }

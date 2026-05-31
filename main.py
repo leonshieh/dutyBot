@@ -8,7 +8,7 @@ import threading
 import logging
 import eel
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image
 
 # 确保项目根目录在 sys.path 中
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,17 +26,6 @@ logger = logging.getLogger(__name__)
 # 全局控制标志
 _quit_app = False
 _web_dir = ''
-
-
-def _create_tray_image():
-    """创建托盘图标（蓝色机器人头像）"""
-    img = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    # 圆形蓝色背景
-    draw.ellipse([4, 4, 60, 60], fill='#3b82f6')
-    # 白色字母 B
-    draw.text((20, 14), 'B', fill='white')
-    return img
 
 
 def _run_eel():
@@ -74,19 +63,6 @@ def _quit_app_action(icon, item):
     os._exit(0)
 
 
-def start_flask():
-    """在独立线程中启动 Flask（可选）"""
-    if not APP_CONFIG.get('enable_flask'):
-        return
-    from flask_routes import create_flask_app
-    app = create_flask_app()
-    app.run(
-        host=APP_CONFIG.get('flask_host', '127.0.0.1'),
-        port=APP_CONFIG.get('flask_port', 5000),
-        debug=False,
-    )
-
-
 def main():
     """应用主入口"""
     global _web_dir
@@ -104,18 +80,13 @@ def main():
 
     _web_dir = os.path.join(BASE_DIR, 'web')
 
-    # Flask（可选）
-    if APP_CONFIG.get('enable_flask'):
-        threading.Thread(target=start_flask, daemon=True).start()
-        logger.info(f"Flask: http://{APP_CONFIG['flask_host']}:{APP_CONFIG['flask_port']}")
-
     # 首次启动 Eel 窗口
     threading.Thread(target=_run_eel, daemon=True).start()
 
     # 托盘图标
     icon = pystray.Icon(
         'dutybot',
-        _create_tray_image(),
+        Image.open(os.path.join(_web_dir, 'message.png')),
         '值班机器人',
         menu=pystray.Menu(
             pystray.MenuItem('显示窗口', _show_window, default=True),

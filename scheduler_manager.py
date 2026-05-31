@@ -8,7 +8,6 @@ from apscheduler.triggers.cron import CronTrigger
 from database import get_connection
 from models import TimingTaskModel
 from message_sender import send_duty_notification, send_custom_message
-from config import APP_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +23,38 @@ def _execute_duty_task(task):
     """执行值班通知定时任务（由调度器回调）"""
     try:
         bot_ids = [int(x.strip()) for x in str(task['bot_ids']).split(',') if x.strip()]
-        table_id = task['table_id']
+        table_id = str(task['table_id']) if task['table_id'] else ''
         at_all = bool(task['at_all'])
-        if bot_ids and table_id:
-            result = send_duty_notification(bot_ids, table_id, at_all)
-            logger.info(f"[定时-值班通知] task_id={task['id']} -> {result}")
-        else:
+        if not bot_ids or not table_id:
             logger.warning(f"[定时-值班通知] task_id={task['id']} 配置不完整，跳过")
+            return
+        if table_id.startswith('upload:'):
+            # 已上传文件：加载 → 转 Markdown → 发送
+            import os
+            import pandas as pd
+            from message_sender import _send_to_bots
+            file_name = table_id.replace('upload:', '')
+            uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+            path = os.path.join(uploads_dir, file_name)
+            if not os.path.exists(path):
+                logger.error(f"[定时-值班通知] 文件不存在: {path}")
+                return
+            df = pd.read_excel(path).head(50)
+            lines = ['## 值班信息通知', '']
+            lines.append('| ' + ' | '.join(str(c) for c in df.columns) + ' |')
+            lines.append('| ' + ' | '.join('---' for _ in df.columns) + ' |')
+            for _, row in df.iterrows():
+                cells = [str(v).replace('|', '\\|') if not (v is None or (isinstance(v, float) and pd.isna(v))) else '' for v in row]
+                lines.append('| ' + ' | '.join(cells) + ' |')
+            message = '\n'.join(lines)
+            # 拼接自定义文本
+            custom = (task.get('message_text') or '').strip()
+            if custom:
+                message += '\n\n---\n\n' + custom
+            result = _send_to_bots(bot_ids=bot_ids, title='值班信息通知', message=message, at_all=at_all, log_type='duty', table_name=file_name)
+        else:
+            result = send_duty_notification(bot_ids, int(table_id), at_all, (task.get('message_text') or ''))
+        logger.info(f"[定时-值班通知] task_id={task['id']} -> {result}")
     except Exception as e:
         logger.error(f"[定时-值班通知] task_id={task['id']} 执行异常: {e}")
 
