@@ -85,9 +85,19 @@ def _build_cron_trigger(rule_value, exec_time):
     elif rule_value == 'weekday':
         return CronTrigger(hour=hour, minute=minute, day_of_week='mon-fri')
     elif rule_value.startswith('weekly_'):
-        # 格式: weekly_1,2,3（数字代表星期，0=周日）
+        # 格式: weekly_1,2,3（前端数字：0=周日, 1=周一, ..., 6=周六）
+        # APScheduler 数字映射不同：0=周一, 1=周二, ..., 6=周日
+        # 转换为文本名称避免歧义
         days_str = rule_value.replace('weekly_', '')
-        return CronTrigger(hour=hour, minute=minute, day_of_week=days_str)
+        aps_names = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+        converted = []
+        for d in days_str.split(','):
+            d = d.strip()
+            if d:
+                # 前端值 → APScheduler 索引: (fe_val + 6) % 7
+                aps_idx = (int(d) + 6) % 7
+                converted.append(aps_names[aps_idx])
+        return CronTrigger(hour=hour, minute=minute, day_of_week=','.join(converted))
     else:
         # 默认每天
         return CronTrigger(hour=hour, minute=minute)
