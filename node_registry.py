@@ -460,7 +460,21 @@ def execute_group_agg(df, params):
             raise ValueError(f"列 '{col}' 不存在")
     if agg_col not in df.columns:
         raise ValueError(f"列 '{agg_col}' 不存在")
+
     result = df.groupby(group_cols)[agg_col].agg(func).reset_index()
+
+    # 将聚合结果列重命名为「聚合函数名(列名)」格式
+    _agg_labels = {
+        "sum": "求和",
+        "mean": "均值",
+        "count": "计数",
+        "max": "最大值",
+        "min": "最小值",
+    }
+    agg_label = _agg_labels.get(func, func)
+    if agg_col in result.columns:
+        result = result.rename(columns={agg_col: f"{agg_label}({agg_col})"})
+
     return result
 
 
@@ -485,7 +499,36 @@ def execute_pivot(df, params):
         raise ValueError(f"列 '{values}' 不存在")
     if columns and columns not in df.columns:
         raise ValueError(f"列 '{columns}' 不存在")
-    result = pd.pivot_table(df, index=index, columns=columns, values=values, aggfunc=aggfunc).reset_index()
+
+    result = pd.pivot_table(
+        df, index=index, columns=columns, values=values, aggfunc=aggfunc
+    ).reset_index()
+
+    # 将值列的标题重命名为「聚合函数名(列名)」格式，如 求和(金额)、计数(人员)
+    _agg_labels = {
+        "sum": "求和",
+        "mean": "均值",
+        "count": "计数",
+        "max": "最大值",
+        "min": "最小值",
+    }
+    agg_label = _agg_labels.get(aggfunc, aggfunc)
+
+    new_columns = {}
+    for col in result.columns:
+        if col == index:
+            continue
+        if isinstance(col, tuple):
+            # 有列索引时，pivot_table 产出多级列名: (值列名, 列值)
+            new_name = f"{agg_label}({col[0]})_{col[1]}"
+        else:
+            # 无列索引时，单级列名就是值列名本身
+            new_name = f"{agg_label}({col})"
+        new_columns[col] = new_name
+
+    if new_columns:
+        result = result.rename(columns=new_columns)
+
     return result
 
 
