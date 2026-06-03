@@ -2418,11 +2418,13 @@
         }
 
         async function refreshFileList() {
+            const container = document.getElementById('uploadedFileList');
+            if (!container) return;
+            let html = '';
+
+            // 已上传的 Excel 文件（文件系统扫描，失败不影响 SQLite 数据展示）
             try {
                 const files = await eel.list_uploaded_files()();
-                const container = document.getElementById('uploadedFileList');
-                let html = '';
-                // 已上传的 Excel 文件
                 if (files && files.length > 0) {
                     html += files.map(f => `
                         <div class="task-item">
@@ -2434,22 +2436,26 @@
                         </div>
                     `).join('');
                 }
-                // 原有值班表（SQLite）
-                if (dutyTableFiles.length > 0) {
-                    html += dutyTableFiles.map(f => {
-                        const uploadTime = f.created_at || f.uploadTime || '';
-                        const cnt = f.record_count || f.recordCount || 0;
-                        return `
-                        <div class="task-item">
-                            <span style="flex:1;font-weight:600;">📋 ${escapeHtml(f.name || f.file_name)}</span>
-                            <span style="font-size:11px;color:var(--text-muted);">${cnt} 条 · ${escapeHtml(uploadTime)}</span>
-                            <button class="btn btn-outline btn-xs" onclick="previewDutyFile(${f.id})">预览</button>
-                            <button class="btn btn-danger btn-xs" onclick="deleteDutyFile(${f.id})">删除</button>
-                        </div>`;
-                    }).join('');
-                }
-                container.innerHTML = html || '<div class="task-empty">暂无已上传的文件</div>';
-            } catch (err) { /* 静默 */ }
+            } catch (err) {
+                console.warn('扫描上传文件目录失败（不影响数据库记录展示）:', err);
+            }
+
+            // 原有值班表（SQLite 数据库，独立渲染不受文件扫描影响）
+            if (dutyTableFiles && dutyTableFiles.length > 0) {
+                html += dutyTableFiles.map(f => {
+                    const uploadTime = f.created_at || f.uploadTime || '';
+                    const cnt = f.record_count || f.recordCount || 0;
+                    return `
+                    <div class="task-item">
+                        <span style="flex:1;font-weight:600;">📋 ${escapeHtml(f.name || f.file_name)}</span>
+                        <span style="font-size:11px;color:var(--text-muted);">${cnt} 条 · ${escapeHtml(uploadTime)}</span>
+                        <button class="btn btn-outline btn-xs" onclick="previewDutyFile(${f.id})">预览</button>
+                        <button class="btn btn-danger btn-xs" onclick="deleteDutyFile(${f.id})">删除</button>
+                    </div>`;
+                }).join('');
+            }
+
+            container.innerHTML = html || '<div class="task-empty">暂无已上传的文件</div>';
         }
 
         async function deleteUploadedFile(fileName) {
@@ -2506,7 +2512,24 @@
                     sel.innerHTML += `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`;
                 });
                 if (cur && (files || []).some(f => f.name === cur)) sel.value = cur;
-            } catch (err) { /* 静默 */ }
+                // 没有文件时给出提示
+                if (!files || files.length === 0) {
+                    sel.innerHTML += '<option disabled>（暂无已上传的文件，请先上传 Excel）</option>';
+                }
+                // 自动恢复上次选择的文件
+                if (files && files.length > 0 && !cur) {
+                    try {
+                        const last = await eel.get_last_data_file()();
+                        if (last.success && last.file_name && files.some(f => f.name === last.file_name)) {
+                            sel.value = last.file_name;
+                            onDataFileSelect(last.file_name);
+                        }
+                    } catch (e) { /* 自动恢复失败不影响正常使用 */ }
+                }
+            } catch (err) {
+                console.error('refreshDataFileSelect 失败:', err);
+                showToast('加载文件列表失败，请检查后台日志', 'error');
+            }
         }
 
         async function onDataFileSelect(fileName) {
@@ -2526,6 +2549,8 @@
                     if (info) info.textContent = `${result.columns.length} 列 · ${result.row_count} 行`;
                     renderDataSteps();
                     showToast(`已选择 ${fileName}`, 'info');
+                    // 记住最后选择的文件，下次启动自动恢复
+                    eel.save_last_data_file(fileName)().catch(() => {});
                 } else {
                     showToast(result.error, 'error');
                 }
@@ -2598,16 +2623,25 @@
                     return true;
                 });
                 container.innerHTML = visibleParams.map(p => {
-                    // 列表类型列参数：渲染为多选复选框
                     if (isColParam(p) && p.type === 'list') {
-                        const curVal = step.params[p.name] || '';
-                        const selectedCols = curVal ? curVal.split(',').map(s => s.trim()) : [];
-                        return `<span style="font-size:12px;display:inline-block;vertical-align:top;">
-                            <div style="margin-bottom:4px;">${p.label}:</div>
-                            <div class="checkbox-list" style="margin-top:2px;" data-list-param="${p.name}">
-                                ${dataColumns.map(c => `<label class="checkbox-item"><input type="checkbox" value="${c}" ${selectedCols.includes(c)?'checked':''} onchange="updateListStepParam(${idx},'${p.name}')"><span>${c}</span></label>`).join('')}
+                        // 复选框多选：列参数（如透视表的行索引列、分组聚合的分组列）
+                        const curVal = step.params[p.name] !== undefined ? step.params[p.name] : [];
+                        const curArr = Array.isArray(curVal) ? curVal : (curVal ? String(curVal).split(',').map(s => s.trim()) : []);
+                        const cid = 'chk_' + idx + '_' + p.name;
+                        const selectedTags = curArr.length > 0
+                            ? curArr.map(c => `<span style="display:inline-block;background:#3b82f6;color:#fff;padding:1px 6px;border-radius:8px;font-size:11px;margin:1px;">${c}</span>`).join('')
+                            : '<span style="color:#94a3b8;font-size:11px;">未选择</span>';
+                        const checkboxes = dataColumns.map(c => {
+                            const checked = curArr.includes(c) ? ' checked' : '';
+                            return `<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:2px 0;"><input type="checkbox" value="${c}"${checked} onchange="updateStepParamMultiCheckbox(${idx},'${p.name}')" style="accent-color:#3b82f6;">${c}</label>`;
+                        }).join('');
+                        return `<div style="font-size:12px;margin-bottom:4px;">
+                            <div style="margin-bottom:4px;font-weight:500;">${p.label}：</div>
+                            <div id="${cid}_tags" style="margin-bottom:4px;min-height:20px;">${selectedTags}</div>
+                            <div style="max-height:140px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;background:#f8fafc;">
+                                ${checkboxes}
                             </div>
-                        </span>`;
+                        </div>`;
                     }
                     if (isColParam(p)) {
                         const required = p.required !== false;
@@ -2626,7 +2660,11 @@
                 nt.params.forEach(p => {
                     if (step.params[p.name] === undefined) {
                         if (isColParam(p) && p.required !== false && dataColumns.length > 0) {
-                            step.params[p.name] = p.type === 'list' ? '' : dataColumns[0];
+                            if (p.type === 'list') {
+                                step.params[p.name] = [dataColumns[0]];
+                            } else {
+                                step.params[p.name] = dataColumns[0];
+                            }
                         } else if (p.options && p.options.length > 0) {
                             step.params[p.name] = p.options[0];
                         }
@@ -2635,6 +2673,29 @@
             } catch (e) {
                 container.innerHTML = '';
             }
+        }
+
+        function updateStepParamMultiCheckbox(idx, key) {
+            // 收集当前参数组内所有勾选的复选框，更新到 dataSteps 并刷新标签显示
+            const cid = 'chk_' + idx + '_' + key;
+            const container = document.getElementById(cid + '_tags');
+            if (!container) return;
+            const parent = container.parentElement;
+            const checks = parent.querySelectorAll('input[type="checkbox"]:checked');
+            const values = Array.from(checks).map(cb => cb.value);
+            dataSteps[idx].params[key] = values;
+            // 原地更新标签，无需全量重新渲染
+            if (values.length > 0) {
+                container.innerHTML = values.map(c => `<span style="display:inline-block;background:#3b82f6;color:#fff;padding:1px 6px;border-radius:8px;font-size:11px;margin:1px;">${c}</span>`).join('');
+            } else {
+                container.innerHTML = '<span style="color:#94a3b8;font-size:11px;">未选择</span>';
+            }
+        }
+
+        function updateStepParamMulti(idx, key, selectEl) {
+            // 保留兼容旧版 select multiple 控件
+            const values = Array.from(selectEl.selectedOptions).map(o => o.value);
+            dataSteps[idx].params[key] = values;
         }
 
         function updateStepType(idx, newType) {
@@ -2649,15 +2710,6 @@
             if (dataSteps[idx].type === 'date_filter' && key === 'operator') {
                 renderDataSteps();
             }
-        }
-
-        function updateListStepParam(idx, key) {
-            const container = document.getElementById('dataStepParams' + idx);
-            const wrapper = container.querySelector('[data-list-param="' + key + '"]');
-            if (!wrapper) return;
-            const checkboxes = wrapper.querySelectorAll('input[type="checkbox"]');
-            const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
-            dataSteps[idx].params[key] = selected.join(',');
         }
 
         function removeDataStep(idx) {

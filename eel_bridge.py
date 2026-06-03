@@ -267,6 +267,8 @@ def get_log_path():
     return get_log_file_path()
 
 
+
+
 # ==================== 数据处理工作流 ====================
 
 import json as _json
@@ -573,6 +575,35 @@ def get_current_preview(page=1, page_size=20):
         'total_pages': total_pages,
         'page_size': page_size,
     }
+
+
+# ---- 上次选择的文件记忆 ----
+_LAST_FILE_PATH = _os.path.join(_UPLOADS_DIR, '.last_data_file.json')
+
+
+@eel.expose
+def save_last_data_file(file_name):
+    """记住用户最后选择的数据文件，下次启动时自动恢复"""
+    try:
+        with open(_LAST_FILE_PATH, 'w') as f:
+            _json.dump({'file_name': file_name or ''}, f)
+    except Exception:
+        pass
+
+
+@eel.expose
+def get_last_data_file():
+    """获取上次选择的数据文件名称"""
+    try:
+        if _os.path.exists(_LAST_FILE_PATH):
+            with open(_LAST_FILE_PATH, 'r') as f:
+                data = _json.load(f)
+                name = data.get('file_name', '')
+                if name and _os.path.exists(_os.path.join(_UPLOADS_DIR, name)):
+                    return {'success': True, 'file_name': name}
+    except Exception:
+        pass
+    return {'success': False, 'file_name': ''}
 
 
 def register_all_exposures():
