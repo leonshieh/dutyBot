@@ -481,7 +481,7 @@ def execute_group_agg(df, params):
 @register_node("pivot", {
     "index": {"type": "str", "required": True, "label": "行索引列"},
     "columns": {"type": "str", "required": False, "label": "列索引列"},
-    "values": {"type": "str", "required": True, "label": "值列"},
+    "values": {"type": "list", "required": True, "label": "值列（可多选）"},
     "aggfunc": {"type": "str", "required": True, "label": "聚合函数", "options": ["sum", "mean", "count", "max", "min"]}
 })
 def execute_pivot(df, params):
@@ -495,8 +495,18 @@ def execute_pivot(df, params):
         raise ValueError("缺少参数: 值列")
     if index not in df.columns:
         raise ValueError(f"列 '{index}' 不存在")
-    if values not in df.columns:
-        raise ValueError(f"列 '{values}' 不存在")
+
+    # 支持逗号分隔的多值列，如 "金额,数量" → ["金额", "数量"]
+    if isinstance(values, str) and "," in values:
+        values = [v.strip() for v in values.split(",") if v.strip()]
+    if isinstance(values, list):
+        for v in values:
+            if v not in df.columns:
+                raise ValueError(f"列 '{v}' 不存在")
+    else:
+        if values not in df.columns:
+            raise ValueError(f"列 '{values}' 不存在")
+
     if columns and columns not in df.columns:
         raise ValueError(f"列 '{columns}' 不存在")
 
@@ -519,10 +529,14 @@ def execute_pivot(df, params):
         if col == index:
             continue
         if isinstance(col, tuple):
-            # 有列索引时，pivot_table 产出多级列名: (值列名, 列值)
-            new_name = f"{agg_label}({col[0]})_{col[1]}"
+            # pivot_table 多级列名: (值列名, 列值) 或 (值列名, '') 当无 columns 时
+            val_name = col[0]
+            col_val = col[1] if len(col) > 1 and col[1] else ""
+            if col_val:
+                new_name = f"{agg_label}({val_name})_{col_val}"
+            else:
+                new_name = f"{agg_label}({val_name})"
         else:
-            # 无列索引时，单级列名就是值列名本身
             new_name = f"{agg_label}({col})"
         new_columns[col] = new_name
 

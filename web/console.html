@@ -2598,6 +2598,17 @@
                     return true;
                 });
                 container.innerHTML = visibleParams.map(p => {
+                    // 列表类型列参数：渲染为多选复选框
+                    if (isColParam(p) && p.type === 'list') {
+                        const curVal = step.params[p.name] || '';
+                        const selectedCols = curVal ? curVal.split(',').map(s => s.trim()) : [];
+                        return `<span style="font-size:12px;display:inline-block;vertical-align:top;">
+                            <div style="margin-bottom:4px;">${p.label}:</div>
+                            <div class="checkbox-list" style="margin-top:2px;" data-list-param="${p.name}">
+                                ${dataColumns.map(c => `<label class="checkbox-item"><input type="checkbox" value="${c}" ${selectedCols.includes(c)?'checked':''} onchange="updateListStepParam(${idx},'${p.name}')"><span>${c}</span></label>`).join('')}
+                            </div>
+                        </span>`;
+                    }
                     if (isColParam(p)) {
                         const required = p.required !== false;
                         const opts = required ? '' : '<option value="">（可选）</option>';
@@ -2615,7 +2626,7 @@
                 nt.params.forEach(p => {
                     if (step.params[p.name] === undefined) {
                         if (isColParam(p) && p.required !== false && dataColumns.length > 0) {
-                            step.params[p.name] = dataColumns[0];
+                            step.params[p.name] = p.type === 'list' ? '' : dataColumns[0];
                         } else if (p.options && p.options.length > 0) {
                             step.params[p.name] = p.options[0];
                         }
@@ -2638,6 +2649,15 @@
             if (dataSteps[idx].type === 'date_filter' && key === 'operator') {
                 renderDataSteps();
             }
+        }
+
+        function updateListStepParam(idx, key) {
+            const container = document.getElementById('dataStepParams' + idx);
+            const wrapper = container.querySelector('[data-list-param="' + key + '"]');
+            if (!wrapper) return;
+            const checkboxes = wrapper.querySelectorAll('input[type="checkbox"]');
+            const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+            dataSteps[idx].params[key] = selected.join(',');
         }
 
         function removeDataStep(idx) {

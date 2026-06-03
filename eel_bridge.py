@@ -277,8 +277,24 @@ import pandas as _pd
 from node_registry import NODE_REGISTRY
 from workflow_engine import execute_workflow
 
-_UPLOADS_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'uploads')
+# 使用 config 中配置的持久化上传目录（~/.dutybot/uploads），
+# 而非 __file__ 相对路径（PyInstaller 打包后 __file__ 指向临时目录，退出即清空）
+from config import APP_CONFIG
+_UPLOADS_DIR = APP_CONFIG['upload_dir']
 _os.makedirs(_UPLOADS_DIR, exist_ok=True)
+
+# 兼容迁移：将旧上传目录（项目根 uploads/）中的文件复制到持久化目录
+_OLD_UPLOADS_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'uploads')
+if _os.path.isdir(_OLD_UPLOADS_DIR) and _os.path.abspath(_OLD_UPLOADS_DIR) != _os.path.abspath(_UPLOADS_DIR):
+    try:
+        for _fn in _os.listdir(_OLD_UPLOADS_DIR):
+            _old_path = _os.path.join(_OLD_UPLOADS_DIR, _fn)
+            _new_path = _os.path.join(_UPLOADS_DIR, _fn)
+            if _os.path.isfile(_old_path) and not _os.path.exists(_new_path):
+                import shutil as _shutil
+                _shutil.copy2(_old_path, _new_path)
+    except Exception:
+        pass  # 静默迁移，失败不影响启动
 
 # 内存中暂存当前上传的 DataFrame
 _current_df = None
