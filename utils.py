@@ -3,26 +3,56 @@
 """
 import logging
 import os
-import pandas as pd
+from datetime import datetime
 from config import APP_CONFIG
 
 
-def df_to_markdown_list(df, max_rows=50):
-    """将 DataFrame 转为 Markdown 无序列表格式，适合手机端阅读
+def df_to_markdown_list(rows, max_rows=50):
+    """将数据行列表转为 Markdown 无序列表格式，适合手机端阅读
+    
+    Args:
+        rows: list[dict] 或 DataFrame（兼容旧接口）
+        max_rows: 最大行数
     
     格式示例：
     - **姓名**: 张三 ｜ **部门**: 技术部 ｜ **日期**: 2026-06-03
     - **姓名**: 李四 ｜ **部门**: 产品部 ｜ **日期**: 2026-06-03
     """
-    df = df.head(max_rows)
+    if hasattr(rows, 'columns'):
+        # 兼容旧的 DataFrame 接口（消息流中可能仍传入 DataFrame）
+        columns = [str(c) for c in rows.columns]
+        rows_list = []
+        for _, row in rows.head(max_rows).iterrows():
+            row_dict = {}
+            for col in columns:
+                row_dict[col] = row[col]
+            rows_list.append(row_dict)
+        rows = rows_list
+    else:
+        if not rows:
+            return ''
+        rows = rows[:max_rows]
+        columns = list(rows[0].keys())
+
+    if not rows:
+        return ''
+
     lines = []
-    columns = [str(c) for c in df.columns]
-    for _, row in df.iterrows():
+    for row in rows:
         parts = []
         for col in columns:
-            v = row[col]
-            if v is None or (isinstance(v, float) and pd.isna(v)):
+            v = row.get(col)
+            if v is None:
                 val_str = ''
+            elif isinstance(v, float):
+                # 检查是否为 NaN
+                import math
+                if math.isnan(v):
+                    val_str = ''
+                else:
+                    val_str = str(v).replace('|', '｜')
+            elif isinstance(v, datetime):
+                val_str = v.strftime('%Y-%m-%d %H:%M:%S')
             else:
                 val_str = str(v).replace('|', '｜')
             parts.append(f'**{col}**: {val_str}')

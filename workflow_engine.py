@@ -1,24 +1,25 @@
 from node_registry import NODE_REGISTRY
 
 
-def execute_workflow(df, nodes_chain, stop_on_error=False):
+def execute_workflow(rows, nodes_chain, stop_on_error=False):
     """
     按顺序执行节点链
 
     Args:
-        df: 输入 DataFrame
+        rows: 输入数据 list[dict]
         nodes_chain: 节点列表 [{"id": "...", "type": "...", "params": {...}}, ...]
         stop_on_error: 是否遇到错误时停止执行
 
     Returns:
         dict: {
-            "result_df": DataFrame,
+            "result_rows": list[dict],
+            "columns": list[str],
             "errors": [{"node_id": "...", "node_type": "...", "error": "..."}],
             "executed_count": int,
             "total_count": int
         }
     """
-    result_df = df.copy()
+    result_rows = [{**r} for r in rows]
     errors = []
     executed_count = 0
     total_count = len(nodes_chain)
@@ -43,7 +44,7 @@ def execute_workflow(df, nodes_chain, stop_on_error=False):
         # 执行节点
         try:
             execute_func = NODE_REGISTRY[node_type]["execute"]
-            result_df = execute_func(result_df, params)
+            result_rows = execute_func(result_rows, params)
             executed_count += 1
         except Exception as e:
             error_msg = str(e)
@@ -55,8 +56,12 @@ def execute_workflow(df, nodes_chain, stop_on_error=False):
             if stop_on_error:
                 break
 
+    # 推断列名
+    columns = list(result_rows[0].keys()) if result_rows else []
+
     return {
-        "result_df": result_df,
+        "result_rows": result_rows,
+        "columns": columns,
         "errors": errors,
         "executed_count": executed_count,
         "total_count": total_count,

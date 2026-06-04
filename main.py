@@ -165,7 +165,7 @@ def main():
     # 托盘图标
     icon = pystray.Icon(
         'dutybot',
-        Image.open(os.path.join(_web_dir, 'message.png')),
+        Image.open(os.path.join(_web_dir, 'robot.png')),
         '值班机器人',
         menu=pystray.Menu(
             pystray.MenuItem('显示窗口', _show_window, default=True),

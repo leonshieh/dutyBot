@@ -32,7 +32,7 @@ def _execute_duty_task(task):
         if table_id.startswith('upload:'):
             # 已上传文件：加载 → 转 Markdown → 发送
             import os
-            import pandas as pd
+            import openpyxl
             from message_sender import _send_to_bots
             file_name = table_id.replace('upload:', '')
             uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -40,9 +40,22 @@ def _execute_duty_task(task):
             if not os.path.exists(path):
                 logger.error(f"[定时-值班通知] 文件不存在: {path}")
                 return
-            df = pd.read_excel(path).head(50)
+            # 用 openpyxl 读取 Excel 并转为 list-of-dict
+            wb = openpyxl.load_workbook(path, read_only=True)
+            ws = wb.active
+            all_rows_data = list(ws.iter_rows(values_only=True))
+            wb.close()
+            rows = []
+            if all_rows_data:
+                headers = [str(h) if h is not None else f'Col{i}' for i, h in enumerate(all_rows_data[0])]
+                for row_data in all_rows_data[1:51]:  # 最多 50 行
+                    row_dict = {}
+                    for i, val in enumerate(row_data):
+                        if i < len(headers):
+                            row_dict[headers[i]] = val
+                    rows.append(row_dict)
             lines = ['## 值班信息通知', '']
-            lines.append(df_to_markdown_list(df))
+            lines.append(df_to_markdown_list(rows))
             message = '\n'.join(lines)
             # 拼接自定义文本
             custom = (task.get('message_text') or '').strip()

@@ -275,7 +275,8 @@ import json as _json
 import os as _os
 import base64 as _base64
 import uuid as _uuid
-import pandas as _pd
+import openpyxl as _openpyxl
+from datetime import datetime as _datetime, date as _date
 from node_registry import NODE_REGISTRY
 from workflow_engine import execute_workflow
 
@@ -298,31 +299,158 @@ if _os.path.isdir(_OLD_UPLOADS_DIR) and _os.path.abspath(_OLD_UPLOADS_DIR) != _o
     except Exception:
         pass  # 静默迁移，失败不影响启动
 
-# 内存中暂存当前上传的 DataFrame
-_original_df = None  # 原始上传数据，每次执行工作流都从此开始
-_current_df = None   # 当前处理结果（用于预览展示）
+# 内存中暂存当前上传的数据（list-of-dict 格式）
+_original_rows = None  # 原始上传数据，每次执行工作流都从此开始
+_current_rows = None   # 当前处理结果（用于预览展示）
 _current_file_name = None
 
 
-def _auto_convert_datetime_cols(df):
-    """自动将 DataFrame 中疑似日期的文本列转为 datetime"""
-    from node_registry import _parse_datetime_col
-    for col in df.columns:
-        dtype_str = str(df[col].dtype)
-        # 只处理文本类列（object/string/str）
-        if not any(t in dtype_str for t in ('object', 'string', 'str')):
-            continue
-        if len(df[col].dropna()) > 0:
-            sample = df[col].dropna().astype(str).head(20)
-            date_count = sample.str.match(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}').sum()
-            if date_count >= len(sample) * 0.5:
-                df[col] = _parse_datetime_col(df[col])
+def _read_excel_to_rows(file_path, header=0, skip_rows=0):
+    """用 openpyxl 读取 Excel 文件，返回 (rows_list, columns_list)
+    
+    Args:
+        file_path: Excel 文件路径
+        header: 表头行号（相对于 skip_rows 之后，0 表示第一行数据为表头）
+        skip_rows: 跳过前 N 行
+    """
+    wb = _openpyxl.load_workbook(file_path, read_only=True)
+    ws = wb.active
 
+    # 读取所有行数据
+    all_rows = []
+    for row in ws.iter_rows(values_only=True):
+        all_rows.append(list(row))
+
+    wb.close()
+
+    if not all_rows:
+        return [], []
+
+    # 跳过行
+    data_start = skip_rows
+    if data_start >= len(all_rows):
+        return [], []
+
+    remaining = all_rows[data_start:]
+
+    # 确定表头
+    if header >= len(remaining):
+        return [], []
+
+    header_row = remaining[header]
+    # 生成列名（处理 None / 空列名）
+    columns = []
+    for i, h in enumerate(header_row):
+        if h is not None and str(h).strip():
+            columns.append(str(h).strip())
+        else:
+            columns.append(f'Column{i + 1}')
+
+    # 数据行（表头之后的所有行）
+    data_rows = remaining[header + 1:]
+
+    # 转换为 list-of-dict
+    rows = []
+    for row_data in data_rows:
+        row_dict = {}
+        for i, val in enumerate(row_data):
+            if i < len(columns):
+                row_dict[columns[i]] = val
+            else:
+                row_dict[f'Column{i + 1}'] = val
+        # 确保所有列都存在
+        for col in columns:
+            if col not in row_dict:
+                row_dict[col] = None
+        rows.append(row_dict)
+
+    return rows, columns
+
+
+def _auto_convert_datetime_cols(rows):
+    """自动检测并转换日期文本列"""
+    if not rows:
+        return rows
+    columns = list(rows[0].keys())
+    for col in columns:
+        # 检查该列是否已有 datetime 对象
+        has_datetime = False
+        has_date_string = False
+        sample_count = 0
+        for r in rows[:20]:
+            v = r.get(col)
+            if v is None:
+                continue
+            if isinstance(v, (_datetime, _date)):
+                has_datetime = True
+                break
+            sample_count += 1
+            s = str(v).strip()
+            import re as _re
+            if _re.match(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', s):
+                has_date_string = True
+
+        if has_datetime:
+            # 已经是 datetime，不需要转换
+            continue
+
+        if not has_date_string or sample_count == 0:
+            continue
+
+        # 检测是否大部分样本都是日期格式
+        date_count = 0
+        total_samples = 0
+        for r in rows[:20]:
+            v = r.get(col)
+            if v is None:
+                continue
+            total_samples += 1
+            s = str(v).strip()
+            import re as _re
+            if _re.match(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', s):
+                date_count += 1
+
+        if total_samples > 0 and date_count >= total_samples * 0.5:
+            from node_registry import _parse_datetime_val
+            for r in rows:
+                v = r.get(col)
+                if v is not None:
+                    r[col] = _parse_datetime_val(v)
+
+    return rows
+
+
+def _serialize_val(v):
+    """将值序列化为 JSON 安全的格式"""
+    if v is None:
+        return None
+    if isinstance(v, (_datetime, _date)):
+        return v.strftime('%Y-%m-%d %H:%M:%S') if isinstance(v, _datetime) else v.strftime('%Y-%m-%d')
+    if isinstance(v, float):
+        import math
+        if math.isnan(v):
+            return None
+    return v
+
+
+def _serialize_rows_for_json(rows, max_rows=50):
+    """将行列表序列化为前端可用的 {columns, data} 格式"""
+    preview = rows[:max_rows]
+    if not preview:
+        return {'columns': [], 'data': []}
+    columns = list(preview[0].keys())
+    data = []
+    for r in preview:
+        data.append([_serialize_val(r.get(col)) for col in columns])
+    return {'columns': columns, 'data': data}
+
+
+# ==================== Excel 上传与处理 ====================
 
 @eel.expose
 def upload_excel(file_name, file_b64, header_row=None, skip_rows=None):
-    """上传 Excel 文件，返回列名列表（重名自动加序号）"""
-    global _original_df, _current_df, _current_file_name
+    """上传 Excel 文件，返回列名列表"""
+    global _original_rows, _current_rows, _current_file_name
     try:
         file_bytes = _base64.b64decode(file_b64)
         # 重名处理：追加序号
@@ -335,19 +463,18 @@ def upload_excel(file_name, file_b64, header_row=None, skip_rows=None):
         file_path = _os.path.join(_UPLOADS_DIR, final_name)
         with open(file_path, 'wb') as f:
             f.write(file_bytes)
+
         header = int(header_row) if header_row is not None and int(header_row) >= 0 else 0
         skip = int(skip_rows) if skip_rows is not None and int(skip_rows) >= 0 else 0
-        _current_df = _pd.read_excel(file_path, header=header, skiprows=skip)
+        _current_rows, columns = _read_excel_to_rows(file_path, header=header, skip_rows=skip)
         _current_file_name = final_name
-        columns = _current_df.columns.tolist()
-        # 将整数列名转为字符串
-        columns = [str(c) for c in columns]
-        _current_df.columns = columns
+
         # 自动检测日期列并转换
-        _auto_convert_datetime_cols(_current_df)
-        # 保存原始数据副本，用于后续工作流执行时重置
-        _original_df = _current_df.copy()
-        row_count = len(_current_df)
+        _current_rows = _auto_convert_datetime_cols(_current_rows)
+        # 保存原始数据副本
+        _original_rows = [{**r} for r in _current_rows]
+
+        row_count = len(_current_rows)
         # 保存元数据
         meta_path = file_path + '.meta.json'
         with open(meta_path, 'w') as mf:
@@ -360,24 +487,20 @@ def upload_excel(file_name, file_b64, header_row=None, skip_rows=None):
 @eel.expose
 def execute_data_workflow(nodes):
     """执行数据处理工作流，返回结果预览"""
-    global _original_df, _current_df
-    if _original_df is None:
+    global _original_rows, _current_rows
+    if _original_rows is None:
         return {'success': False, 'error': '请先上传 Excel 文件'}
     try:
-        # 始终从原始上传数据开始执行，避免累积变换
-        result = execute_workflow(_original_df.copy(), nodes)
-        _current_df = result['result_df']
-        # 预览前 50 行
-        preview = result['result_df'].head(50)
-        for col in preview.columns:
-            if _pd.api.types.is_datetime64_any_dtype(preview[col]):
-                preview[col] = preview[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-        preview_clean = preview.astype(object).where(preview.notna(), None)
+        # 始终从原始上传数据开始执行
+        result = execute_workflow([{**r} for r in _original_rows], nodes)
+        _current_rows = result['result_rows']
+
+        serialized = _serialize_rows_for_json(_current_rows, 50)
         return {
             'success': True,
-            'columns': preview_clean.columns.tolist(),
-            'data': preview_clean.values.tolist(),
-            'row_count': len(result['result_df']),
+            'columns': serialized['columns'],
+            'data': serialized['data'],
+            'row_count': len(_current_rows),
             'errors': result['errors'],
             'executed_count': result['executed_count'],
             'total_count': result['total_count'],
@@ -443,13 +566,13 @@ def delete_workflow(wf_id):
 @eel.expose
 def export_result_markdown():
     """将当前结果转为 Markdown 无序列表文本（适合手机阅读）"""
-    global _current_df
-    if _current_df is None:
+    global _current_rows
+    if _current_rows is None:
         return {'success': False, 'error': '无数据可导出'}
     try:
-        df = _current_df.head(50)
-        md = df_to_markdown_list(df)
-        return {'success': True, 'markdown': md, 'row_count': len(_current_df)}
+        rows = _current_rows[:50]
+        md = df_to_markdown_list(rows)
+        return {'success': True, 'markdown': md, 'row_count': len(_current_rows)}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -484,8 +607,8 @@ def list_uploaded_files():
 
 @eel.expose
 def select_uploaded_file(file_name, header_row=None, skip_rows=None):
-    """选择已上传的文件，加载为当前 DataFrame"""
-    global _original_df, _current_df, _current_file_name
+    """选择已上传的文件，加载为当前数据"""
+    global _original_rows, _current_rows, _current_file_name
     path = _os.path.join(_UPLOADS_DIR, file_name)
     if not _os.path.exists(path):
         return {'success': False, 'error': f'文件不存在: {file_name}'}
@@ -502,15 +625,13 @@ def select_uploaded_file(file_name, header_row=None, skip_rows=None):
                 pass
         header = int(header_row) if header_row is not None and int(header_row) >= 0 else 0
         skip = int(skip_rows) if skip_rows is not None and int(skip_rows) >= 0 else 0
-        _current_df = _pd.read_excel(path, header=header, skiprows=skip)
+        _current_rows, columns = _read_excel_to_rows(path, header=header, skip_rows=skip)
         _current_file_name = file_name
-        columns = _current_df.columns.tolist()
-        columns = [str(c) for c in columns]
-        _current_df.columns = columns
-        _auto_convert_datetime_cols(_current_df)
-        # 保存原始数据副本，用于后续工作流执行时重置
-        _original_df = _current_df.copy()
-        row_count = len(_current_df)
+
+        _current_rows = _auto_convert_datetime_cols(_current_rows)
+        _original_rows = [{**r} for r in _current_rows]
+
+        row_count = len(_current_rows)
         with open(meta_path, 'w') as mf:
             _json.dump({'row_count': row_count, 'header_row': header, 'skip_rows': skip}, mf)
         return {'success': True, 'columns': columns, 'row_count': row_count, 'file_name': file_name}
@@ -543,24 +664,20 @@ def delete_uploaded_file(file_name):
 @eel.expose
 def get_current_preview(page=1, page_size=20):
     """获取当前处理结果预览（分页）"""
-    global _current_df
-    if _current_df is None:
+    global _current_rows
+    if _current_rows is None:
         return {'success': False, 'error': '无数据'}
-    total = len(_current_df)
+    total = len(_current_rows)
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = max(1, min(page, total_pages))
     start = (page - 1) * page_size
     end = start + page_size
-    preview = _current_df.iloc[start:end]
-    # 将 datetime 列转为字符串，避免 JSON 序列化失败
-    for col in preview.columns:
-        if _pd.api.types.is_datetime64_any_dtype(preview[col]):
-            preview[col] = preview[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-    preview_clean = preview.astype(object).where(preview.notna(), None)
+
+    serialized = _serialize_rows_for_json(_current_rows[start:end], page_size)
     return {
         'success': True,
-        'columns': preview_clean.columns.tolist(),
-        'data': preview_clean.values.tolist(),
+        'columns': serialized['columns'],
+        'data': serialized['data'],
         'row_count': total,
         'page': page,
         'total_pages': total_pages,
@@ -648,11 +765,11 @@ def execute_message_flow(nodes):
       - msg_send:     {type: "msg_send", params: {bot_ids: [1,2], at_all: bool}}  — 终端节点
     返回: {success, message, errors[], sent_result}
     """
-    global _current_df, _current_file_name
+    global _current_rows, _current_file_name
     accumulated_text = ''
     errors = []
     sent_result = None
-    saved_df = _current_df
+    saved_rows = _current_rows
     saved_file = _current_file_name
 
     try:
@@ -690,11 +807,11 @@ def execute_message_flow(nodes):
                     errors.append({'node_type': nt, 'error': f'文件不存在: {file_name}'})
                     continue
                 try:
-                    df = _pd.read_excel(path)
-                    result = execute_workflow(df, wf_nodes)
-                    df_result = result['result_df']
+                    rows, _ = _read_excel_to_rows(path)
+                    result = execute_workflow(rows, wf_nodes)
+                    result_rows = result['result_rows']
                     # 导出为 Markdown 无序列表（手机友好格式）
-                    table_md = df_to_markdown_list(df_result)
+                    table_md = df_to_markdown_list(result_rows)
                     if accumulated_text:
                         accumulated_text += '\n\n'
                     accumulated_text += table_md
@@ -720,8 +837,8 @@ def execute_message_flow(nodes):
                 break  # 发送后终止
 
     finally:
-        # 恢复原始 DataFrame
-        _current_df = saved_df
+        # 恢复原始数据
+        _current_rows = saved_rows
         _current_file_name = saved_file
 
     return {
@@ -746,14 +863,14 @@ def preview_data_process_result(file_name, workflow_id):
     if not wf_row:
         return {'success': False, 'error': f'工作流不存在: {workflow_id}'}
     try:
-        df = _pd.read_excel(path)
+        rows, _ = _read_excel_to_rows(path)
         wf_nodes = _json.loads(wf_row['nodes'])
-        result = execute_workflow(df, wf_nodes)
-        md = df_to_markdown_list(result['result_df'])
+        result = execute_workflow(rows, wf_nodes)
+        md = df_to_markdown_list(result['result_rows'])
         return {
             'success': True,
             'markdown': md,
-            'row_count': len(result['result_df']),
+            'row_count': len(result['result_rows']),
             'errors': [{'node_type': e.get('node_type', ''), 'error': e.get('error', '')} for e in result.get('errors', [])],
             'executed_count': result['executed_count'],
             'total_count': result['total_count'],
