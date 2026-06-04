@@ -27,11 +27,11 @@
 | 桌面壳 | [Eel](https://github.com/python-eel/Eel)（Python ↔ JS WebSocket 桥接） |
 | 托盘 | pystray + Pillow |
 | 后端 | Python 3.10+ |
-| 数据处理 | pandas + openpyxl |
+| 数据处理 | 纯 Python + openpyxl（无 pandas/numpy 依赖，打包体积 < 30MB） |
 | 定时调度 | APScheduler |
 | 数据库 | SQLite（`~/.dutybot/dutybot.db`） |
 | 消息推送 | 钉钉 Webhook（Markdown + 加签，兼容内外网） |
-| 打包 | PyInstaller |
+| 打包 | PyInstaller（+ UPX 压缩） |
 
 ---
 
@@ -132,7 +132,7 @@ python main.py
 
 ```
 dutyBot/
-├── main.py                 # 应用入口
+├── main.py                 # 应用入口（窗口 + 托盘 + 单实例锁）
 ├── config.py               # 全局配置
 ├── database.py             # 数据库初始化
 ├── models.py               # 数据访问层
@@ -141,14 +141,16 @@ dutyBot/
 ├── message_sender.py       # 钉钉消息发送 + 加签
 ├── scheduler_manager.py    # 定时任务调度
 ├── eel_bridge.py           # Eel 前后端桥接
-├── node_registry.py        # 数据处理节点注册
+├── node_registry.py        # 数据处理节点注册（25 种节点，纯 Python）
 ├── workflow_engine.py      # 数据流执行引擎
 ├── utils.py                # 工具函数
+├── generate_robot_icon.py  # 托盘图标生成
 ├── requirements.txt        # Python 依赖
 ├── README.md               # 本文件
 └── web/
     ├── console.html        # 前端界面
-    └── tray_icon.png       # 托盘图标
+    ├── robot.png           # 托盘图标
+    └── message.png         # 消息图标
 ```
 
 ---
@@ -162,3 +164,41 @@ dutyBot/
 | `dutybot.db` | SQLite 数据库（机器人、值班表、定时任务、数据流、消息流、发送日志） |
 | `logs/dutybot.log` | 应用运行日志 |
 | `uploads/` | 上传的 xlsx 文件缓存 |
+
+---
+
+## 打包部署
+
+### Windows
+
+```cmd
+:: 1. 安装依赖
+pip install -r requirements.txt
+
+:: 2. 下载 UPX（https://github.com/upx/upx/releases），解压到 C:\tools\upx
+
+:: 3. 打包
+pyinstaller --onefile --windowed ^
+    --upx-dir=C:\tools\upx ^
+    --add-data "web;web" ^
+    --name dutyBot ^
+    main.py
+```
+
+> 打包后 exe 体积约 **22-28 MB**（含 UPX 压缩），远低于同类工具的 150MB+。
+
+### macOS
+
+```bash
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. 安装 UPX: brew install upx
+
+# 3. 打包
+pyinstaller --onefile --windowed \
+    --upx-dir=/opt/homebrew/bin \
+    --add-data "web:web" \
+    --name dutyBot \
+    main.py
+```
