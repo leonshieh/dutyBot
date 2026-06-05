@@ -2088,25 +2088,11 @@
                 try {
                     let result;
                     if (tableId.startsWith('upload:')) {
-                        // 已上传文件：先校验是否为值班表格式，再加载发送
+                        // 已上传文件：使用值班表专用函数构建今日+下次值班 Markdown
                         const fileName = tableId.replace('upload:', '');
-                        const sel = await eel.select_uploaded_file(fileName)();
-                        if (!sel.success) return showToast('文件加载失败: ' + (sel.error || ''), 'error');
-                        if (!sel.columns || sel.columns.length < 3) return showToast('文件格式不符合值班表要求（至少需要日期、星期、人员三列）', 'error');
-                        // 校验第一列是否为日期格式，第二列是否为星期格式
-                        const prev = await eel.get_current_preview(1, 5)();
-                        if (prev.success && prev.data && prev.data.length > 0) {
-                            const firstVal = String(prev.data[0][0] || '');
-                            const secondVal = String(prev.data[0][1] || '');
-                            const datePattern = /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/;
-                            const weekdayPattern = /^(星期|周|周一|周二|周三|周四|周五|周六|周日|Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i;
-                            if (!datePattern.test(firstVal) && !weekdayPattern.test(secondVal)) {
-                                return showToast('文件格式不符合值班表要求（第一列需为日期、第二列需为星期）', 'error');
-                            }
-                        }
-                        const md = await eel.export_result_markdown()();
-                        if (!md.success) return showToast('导出失败: ' + md.error, 'error');
-                        let msg = `## 值班信息通知\n\n${md.markdown}`;
+                        const md = await eel.build_duty_markdown_for_file(fileName)();
+                        if (!md.success) return showToast('构建值班消息失败: ' + (md.error || ''), 'error');
+                        let msg = md.markdown;
                         if (customText) msg += '\n\n---\n\n' + customText;
                         result = await eel.send_custom_message_eel(botIds, msg, atAll)();
                     } else {
@@ -2379,7 +2365,36 @@
         // ============ 数据处理工作流 ============
         let dataSteps = [];
         let dataColumns = [];
+        let originalDataColumns = [];
         let dataWorkflows = [];
+        const NODE_USAGE = {
+            text_filter:    { desc: '保留指定列中包含关键词的行（不区分大小写）。', example: '列="姓名"，关键词="张" → 保留所有姓张的人' },
+            text_replace:   { desc: '将指定列中所有匹配的文本替换为新文本。', example: '列="城市"，原="北京"，新="BJ" → "北京"全部变为"BJ"' },
+            text_slice:     { desc: '按位置截取文本子串，索引从0开始，结果覆盖原列。', example: 'start=0, end=3 → "HelloWorld"截取为"Hel"' },
+            text_trim:      { desc: '去除单元格首尾空白字符（中间空格不去）。', example: '" 张三 " → "张三"' },
+            text_case:      { desc: '转换英文大小写。upper=全大写，lower=全小写，title=首字母大写。', example: 'title → "hello world"变为"Hello World"' },
+            regex_extract:  { desc: '用正则表达式匹配并提取内容到新列。有分组取第一组，无分组取整体。', example: 'pattern="(\\d+)年" → 从"2026年"提取"2026"' },
+            num_filter:     { desc: '按数值条件筛选行，空值行自动丢弃。', example: '列="金额"，> 100 → 保留金额大于100的行' },
+            num_arithmetic: { desc: '对列中每个数值进行加减乘除运算，空值跳过。', example: '列="价格"，* 1.1 → 全部涨价10%' },
+            num_round:      { desc: '将数值四舍五入到指定小数位，空值当0处理。', example: 'decimals=2 → 3.14159变为3.14' },
+            num_aggregate:  { desc: '对整个列计算汇总值（求和/均值/最大/最小/计数），结果附在第一行。', example: 'func=sum → 计算该列所有数值的总和' },
+            date_format:    { desc: '将日期列转换为指定格式。支持 %Y/%m/%d 等格式码。', example: 'format="%Y年%m月%d日" → "2026年06月05日"' },
+            date_extract:   { desc: '从日期列提取年/月/日/星期，生成新列。', example: 'part=weekday → 新列值为"周一""周二"等中文' },
+            date_filter:    { desc: '按日期条件筛选行。等于时只比较日期部分，忽略时分秒。', example: '筛选方式=大于，日期=2026/01/01 → 保留今年起的数据' },
+            col_delete:     { desc: '从表格中移除指定列。', example: '列="备注" → 删除备注列，其余列保留' },
+            col_select:     { desc: '只保留选中的列，其余全部丢弃。', example: '勾选"姓名"+"部门" → 只剩这两列' },
+            col_rename:     { desc: '给指定列换个新名字。新列名请手动输入。', example: '列="col1"，新列名="姓名" → col1列标题变为"姓名"' },
+            col_split:      { desc: '按分隔符将一列拆成多列。不指定新列名则自动命名为 列名_1, 列名_2...', example: '列="姓名"，分隔符="," → "张三,技术部"拆成两列' },
+            col_merge:      { desc: '将多列拼成一列，用分隔符连接，生成新列。', example: '列=["姓","名"]，分隔符="" → 新列值为"张三"' },
+            col_calc:       { desc: '用 Python 表达式对列做算术运算。列名中中文/特殊字符会替换为_。', example: '表达式="单价_*_数量" → 新列=每行单价×数量（建议先用重命名列改成英文）' },
+            row_dedup:      { desc: '删除重复行。不选依据列=整行完全一样才去重；选了=指定列相同就去重，保留第一条。', example: '勾选"姓名" → 同名的人只保留第一行' },
+            row_sort:       { desc: '按指定列排序。空值始终排在末尾。', example: '列="金额"，desc → 金额大的在前，空值在最后' },
+            row_fillna:     { desc: '填充空值。value=用指定值填；ffill=用上一行非空值填；bfill=用下一行非空值填。', example: 'method=ffill → 空单元格取上方最近的非空值' },
+            group_agg:      { desc: '按分组列归类，对聚合列做统计。count 支持文本列。', example: '分组列="部门"，聚合列="工资"，sum → 各部门工资总和' },
+            pivot:          { desc: '二维统计表。行索引分组，列索引展开为多列，对值列聚合。无列索引时同分组聚合。', example: '行="应用系统"，值=任意列，count → 各系统记录数量' },
+            type_convert:   { desc: '强制转换列的数据类型。', example: '目标=int → 将文本"123"转为整数123' },
+            cond_assign:    { desc: '根据条件表达式给每行赋值。语法同跨列计算。', example: '条件="金额_>_100"，真="高"，假="低" → 新列打标签' },
+        };
         const DATA_NODE_CATEGORIES = {
             '文本操作': { text_filter: '文本筛选', text_replace: '文本替换', text_slice: '文本截取', text_trim: '去除空格', text_case: '大小写转换', regex_extract: '正则提取' },
             '数值操作': { num_filter: '数值筛选', num_arithmetic: '四则运算', num_round: '数值取整', num_aggregate: '聚合计算' },
@@ -2401,6 +2416,7 @@
                 const result = await eel.upload_excel(file.name, b64, headerRow, skipRows)();
                 if (result.success) {
                     dataColumns = result.columns;
+                    originalDataColumns = [...result.columns];
                     dataSteps = [];
                     document.getElementById('dataFileInfo').style.display = '';
                     document.getElementById('dataFileInfo').textContent = `已加载: ${result.file_name} · ${result.columns.length} 列 · ${result.row_count} 行`;
@@ -2476,6 +2492,7 @@
                 const result = await eel.reparse_uploaded_file(fileName, header, skip)();
                 if (result.success) {
                     dataColumns = result.columns;
+                    originalDataColumns = [...result.columns];
                     document.getElementById('dataFileInfo').style.display = '';
                     document.getElementById('dataFileInfo').textContent = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
                     document.getElementById('dataResultCard').style.display = '';
@@ -2491,6 +2508,7 @@
                 const result = await eel.select_uploaded_file(fileName)();
                 if (result.success) {
                     dataColumns = result.columns;
+                    originalDataColumns = [...result.columns];
                     document.getElementById('dataFileInfo').style.display = '';
                     document.getElementById('dataFileInfo').textContent = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
                     document.getElementById('dataResultCard').style.display = '';
@@ -2535,6 +2553,7 @@
                 const result = await eel.select_uploaded_file(fileName)();
                 if (result.success) {
                     dataColumns = result.columns;
+                    originalDataColumns = [...result.columns];
                     dataSteps = [];
                     if (info) info.textContent = `${result.columns.length} 列 · ${result.row_count} 行`;
                     renderDataSteps();
@@ -2582,6 +2601,7 @@
                         <button class="btn btn-danger btn-xs" onclick="removeDataStep(${i})">删除</button>
                     </div>
                     <div id="dataStepParams${i}" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+                    <div id="dataStepUsage${i}" style="margin-top:2px;"></div>
                 </div>`;
             }).join('');
             dataSteps.forEach((step, i) => renderStepParams(i, step));
@@ -2606,7 +2626,7 @@
                 const types = await eel.get_workflow_node_types()();
                 const nt = types.find(t => t.type === step.type);
                 if (!nt) { container.innerHTML = ''; return; }
-                const isColParam = p => p.type === 'column_select' || ['column', 'columns', 'index', 'values', 'lookup_col', 'agg_col', 'group_cols', 'new_col'].includes(p.name) || (p.label && (p.label.includes('列') || p.label.includes('列名')));
+                const isColParam = p => p.type === 'column_select' || ['column', 'columns', 'index', 'values', 'lookup_col', 'agg_col', 'group_cols', 'new_col'].includes(p.name) || (p.label && (p.label.includes('列') || p.label.includes('列名')) && p.name !== 'new_name');
                 // 过滤：date_filter 的 date2 仅在 between 时显示
                 const visibleParams = nt.params.filter(p => {
                     if (step.type === 'date_filter' && p.name === 'date2' && step.params.operator !== '日期范围内' && step.params.operator !== 'between') return false;
@@ -2662,6 +2682,16 @@
                 });
             } catch (e) {
                 container.innerHTML = '';
+            }
+            // 渲染用法提示卡片
+            const usageContainer = document.getElementById('dataStepUsage' + idx);
+            if (usageContainer) {
+                const usage = NODE_USAGE[step.type];
+                if (usage) {
+                    usageContainer.innerHTML = `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:6px 10px;font-size:11px;line-height:1.6;color:#1e40af;"><span style="font-weight:600;">💡 用法：</span>${usage.desc}<br><span style="font-weight:600;">📋 示例：</span>${usage.example}</div>`;
+                } else {
+                    usageContainer.innerHTML = '';
+                }
             }
         }
 
@@ -2723,10 +2753,22 @@
             document.getElementById('dataPreviewModalOverlay').classList.add('hidden');
         }
 
-        function resetDataWorkflow() {
-            if (dataSteps.length === 0) return showToast('当前没有编排步骤', 'info');
-            if (!confirm('确定要清空所有数据流编排步骤吗？此操作不可恢复。')) return;
+        async function resetDataWorkflow() {
+            if (!confirm('确定要清空所有数据流编排步骤并恢复到原始数据吗？此操作不可恢复。')) return;
             dataSteps = [];
+            // 恢复到原始文件的列名
+            if (originalDataColumns.length > 0) {
+                dataColumns = [...originalDataColumns];
+            }
+            // 重置后端预览数据到原始数据
+            try {
+                const result = await eel.reset_current_preview()();
+                if (result.success) {
+                    _renderTable('dataResultHead', 'dataResultBody', result.columns, result.data, result.row_count, 'dataRowCount', 1, 1);
+                }
+            } catch (e) {
+                // 静默处理
+            }
             renderDataSteps();
             showToast('数据流已重置', 'info');
         }

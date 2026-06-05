@@ -117,6 +117,20 @@ def send_custom_message_eel(bot_ids, message_text, at_all=False):
     return send_custom_message(bot_ids, message_text, at_all)
 
 
+@eel.expose
+def build_duty_markdown_for_file(file_name):
+    """为上传的值班表文件构建今日+下次值班 Markdown"""
+    import os
+    from message_sender import build_duty_markdown_from_excel
+    path = os.path.join(_UPLOADS_DIR, file_name)
+    if not os.path.exists(path):
+        return {'success': False, 'error': f'文件不存在: {file_name}'}
+    md = build_duty_markdown_from_excel(path)
+    if md is None:
+        return {'success': False, 'error': f'无法解析文件: {file_name}'}
+    return {'success': True, 'markdown': md}
+
+
 # ==================== 定时任务管理 ====================
 
 @eel.expose
@@ -430,6 +444,9 @@ def _serialize_val(v):
         import math
         if math.isnan(v):
             return None
+    if isinstance(v, dict):
+        # 将聚合结果字典转为可读字符串，如 {"sum_金额": 15000} → "sum_金额: 15000"
+        return ', '.join(f'{k}: {_serialize_val(v2)}' for k, v2 in v.items())
     return v
 
 
@@ -682,6 +699,23 @@ def get_current_preview(page=1, page_size=20):
         'page': page,
         'total_pages': total_pages,
         'page_size': page_size,
+    }
+
+
+@eel.expose
+def reset_current_preview():
+    """重置当前预览数据为原始上传数据"""
+    global _current_rows, _original_rows
+    if _original_rows is None:
+        return {'success': False, 'error': '无原始数据'}
+    _current_rows = [{**r} for r in _original_rows]
+    preview = _current_rows[:20]
+    serialized = _serialize_rows_for_json(preview, 20)
+    return {
+        'success': True,
+        'columns': serialized['columns'],
+        'data': serialized['data'],
+        'row_count': len(_current_rows),
     }
 
 

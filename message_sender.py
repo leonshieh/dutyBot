@@ -73,6 +73,85 @@ def _build_duty_markdown(table_id):
     return "\n".join(lines)
 
 
+def build_duty_markdown_from_excel(file_path):
+    """从上传的 Excel 文件构建今日值班 + 下次预告的 Markdown 通知
+    格式：第1列=日期，第2列=星期，第3列=人员
+    """
+    import os
+    import re
+    from datetime import date, datetime as dt
+    import openpyxl
+
+    if not os.path.exists(file_path):
+        return None
+
+    wb = openpyxl.load_workbook(file_path, read_only=True)
+    ws = wb.active
+    all_rows_data = list(ws.iter_rows(values_only=True))
+    wb.close()
+
+    today_str = date.today().strftime('%Y/%m/%d')
+    records = []
+    for row_data in all_rows_data[1:]:  # 跳过表头行
+        if not row_data[0] or not row_data[2]:
+            continue
+        date_val = row_data[0]
+        if isinstance(date_val, dt):
+            date_str = date_val.strftime('%Y/%m/%d')
+        else:
+            m = re.match(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', str(date_val).strip())
+            date_str = f"{m.group(1)}/{int(m.group(2)):02d}/{int(m.group(3)):02d}" if m else str(date_val).strip()
+        records.append({
+            'duty_date': date_str,
+            'weekday': str(row_data[1]).strip() if row_data[1] else '',
+            'person': str(row_data[2]).strip(),
+        })
+
+    if not records:
+        return f"## 值班信息通知\n\n暂无值班信息"
+
+    # 查找今日值班记录
+    today_idx = None
+    for i, r in enumerate(records):
+        if r['duty_date'] == today_str:
+            today_idx = i
+            break
+
+    lines = ['## 值班信息通知', '']
+    if today_idx is not None:
+        r = records[today_idx]
+        lines.append('## **今日值班信息：**')
+        lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
+    else:
+        lines.append('## **今日值班信息：**')
+        lines.append(f"今日（{today_str}）暂无值班安排")
+
+    # 下一次值班（今天之后的第一条）
+    next_idx = None
+    if today_idx is not None and today_idx + 1 < len(records):
+        next_idx = today_idx + 1
+    else:
+        for i, r in enumerate(records):
+            if r['duty_date'] > today_str:
+                next_idx = i
+                break
+
+    if next_idx is not None:
+        r = records[next_idx]
+        lines.append('')
+        lines.append('---')
+        lines.append('')
+        lines.append('## **下次值班预告：**')
+        lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
+
+    lines.append('')
+    lines.append('---')
+    lines.append('')
+    lines.append('请值班人员准时签到值班！')
+
+    return '\n'.join(lines)
+
+
 def send_duty_notification(bot_ids, table_id, at_all=False, custom_text=''):
     """发送值班通知到指定机器人列表，可选拼接自定义文本"""
     message = _build_duty_markdown(table_id)

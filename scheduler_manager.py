@@ -3,12 +3,12 @@
 实现 cron 定时触发值班通知和自定义消息发送
 """
 import logging
+import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from database import get_connection
 from models import TimingTaskModel
 from message_sender import send_duty_notification, send_custom_message
-from utils import df_to_markdown_list
 
 logger = logging.getLogger(__name__)
 
@@ -30,40 +30,25 @@ def _execute_duty_task(task):
             logger.warning(f"[定时-值班通知] task_id={task['id']} 配置不完整，跳过")
             return
         if table_id.startswith('upload:'):
-            # 已上传文件：加载 → 转 Markdown → 发送
-            import os
-            import openpyxl
-            from message_sender import _send_to_bots
+            # 已上传文件：使用公共函数构建今日+下次值班 Markdown
+            from config import APP_CONFIG
+            from message_sender import build_duty_markdown_from_excel, _send_to_bots
             file_name = table_id.replace('upload:', '')
-            uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-            path = os.path.join(uploads_dir, file_name)
+            path = os.path.join(APP_CONFIG['upload_dir'], file_name)
             if not os.path.exists(path):
                 logger.error(f"[定时-值班通知] 文件不存在: {path}")
                 return
-            # 用 openpyxl 读取 Excel 并转为 list-of-dict
-            wb = openpyxl.load_workbook(path, read_only=True)
-            ws = wb.active
-            all_rows_data = list(ws.iter_rows(values_only=True))
-            wb.close()
-            rows = []
-            if all_rows_data:
-                headers = [str(h) if h is not None else f'Col{i}' for i, h in enumerate(all_rows_data[0])]
-                for row_data in all_rows_data[1:51]:  # 最多 50 行
-                    row_dict = {}
-                    for i, val in enumerate(row_data):
-                        if i < len(headers):
-                            row_dict[headers[i]] = val
-                    rows.append(row_dict)
-            lines = ['## 值班信息通知', '']
-            lines.append(df_to_markdown_list(rows))
-            message = '\n'.join(lines)
+            message = build_duty_markdown_from_excel(path)
+            if message is None:
+                logger.error(f"[定时-值班通知] 无法解析文件: {path}")
+                return
             # 拼接自定义文本
-            custom = (task.get('message_text') or '').strip()
+            custom = (task['message_text'] or '').strip()
             if custom:
                 message += '\n\n---\n\n' + custom
-            result = _send_to_bots(bot_ids=bot_ids, title='值班信息通知', message=message, at_all=at_all, log_type='duty', table_name=file_name)
+            result = _send_to_bots(bot_ids=bot_ids, title='值班信息通知', message=message, at_all=at_all, log_type='duty')
         else:
-            result = send_duty_notification(bot_ids, int(table_id), at_all, (task.get('message_text') or ''))
+            result = send_duty_notification(bot_ids, int(table_id), at_all, (task['message_text'] or ''))
         logger.info(f"[定时-值班通知] task_id={task['id']} -> {result}")
     except Exception as e:
         logger.error(f"[定时-值班通知] task_id={task['id']} 执行异常: {e}")

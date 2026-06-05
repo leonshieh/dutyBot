@@ -122,8 +122,8 @@ def execute_text_replace(rows, params):
 })
 def execute_text_slice(rows, params):
     column = params["column"]
-    start = params["start"]
-    end = params["end"]
+    start = int(params["start"])
+    end = int(params["end"])
     if rows and column not in rows[0]:
         raise ValueError(f"列 '{column}' 不存在")
     return [{**r, column: str(r.get(column, ''))[start:end]} for r in rows]
@@ -189,7 +189,7 @@ def execute_regex_extract(rows, params):
 def execute_num_filter(rows, params):
     column = params["column"]
     operator = params["operator"]
-    value = params["value"]
+    value = float(params["value"])
     if rows and column not in rows[0]:
         raise ValueError(f"列 '{column}' 不存在")
 
@@ -216,7 +216,7 @@ def execute_num_filter(rows, params):
 def execute_num_arithmetic(rows, params):
     column = params["column"]
     operator = params["operator"]
-    value = params["value"]
+    value = float(params["value"])
     if rows and column not in rows[0]:
         raise ValueError(f"列 '{column}' 不存在")
 
@@ -248,7 +248,7 @@ def execute_num_arithmetic(rows, params):
 })
 def execute_num_round(rows, params):
     column = params["column"]
-    decimals = params["decimals"]
+    decimals = int(params["decimals"])
     if rows and column not in rows[0]:
         raise ValueError(f"列 '{column}' 不存在")
     return [{**r, column: round(_to_float(r.get(column)) or 0, decimals)} for r in rows]
@@ -321,11 +321,12 @@ def execute_date_extract(rows, params):
     if rows and column not in rows[0]:
         raise ValueError(f"列 '{column}' 不存在")
 
+    _WEEKDAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     extract_map = {
         "year": lambda d: d.year,
         "month": lambda d: d.month,
         "day": lambda d: d.day,
-        "weekday": lambda d: d.weekday(),
+        "weekday": lambda d: _WEEKDAY_NAMES[d.weekday()],
     }
     if part not in extract_map:
         raise ValueError(f"不支持的日期部分: '{part}'，可选: year/month/day/weekday")
@@ -631,7 +632,7 @@ def execute_row_fillna(rows, params):
 @register_node("group_agg", {
     "group_cols": {"type": "list", "required": True, "label": "分组列"},
     "agg_col": {"type": "str", "required": True, "label": "聚合列"},
-    "func": {"type": "str", "required": True, "label": "聚合函数"}
+    "func": {"type": "str", "required": True, "label": "聚合函数", "options": ["求和", "均值", "计数", "最大值", "最小值"]}
 })
 def execute_group_agg(rows, params):
     group_cols = params["group_cols"]
@@ -653,33 +654,27 @@ def execute_group_agg(rows, params):
             groups[key] = []
         groups[key].append(r)
 
-    _agg_labels = {
-        "sum": "求和",
-        "mean": "均值",
-        "count": "计数",
-        "max": "最大值",
-        "min": "最小值",
-    }
-    agg_label = _agg_labels.get(func, func)
-    result_col_name = f"{agg_label}({agg_col})"
+    result_col_name = f"{func}({agg_col})"
 
     result = []
     for key, group_rows in groups.items():
-        vals = [_to_float(r.get(agg_col)) for r in group_rows]
-        vals = [v for v in vals if v is not None]
-
-        if func == "sum":
-            agg_val = sum(vals) if vals else 0
-        elif func == "mean":
-            agg_val = sum(vals) / len(vals) if vals else 0
-        elif func == "count":
-            agg_val = len(vals)
-        elif func == "max":
-            agg_val = max(vals) if vals else None
-        elif func == "min":
-            agg_val = min(vals) if vals else None
+        if func == "计数":
+            # count 不依赖值列数值，直接用分组行数
+            agg_val = len(group_rows)
         else:
-            raise ValueError(f"不支持的聚合函数: '{func}'，可选: sum/mean/count/max/min")
+            vals = [_to_float(r.get(agg_col)) for r in group_rows]
+            vals = [v for v in vals if v is not None]
+
+            if func == "求和":
+                agg_val = sum(vals) if vals else 0
+            elif func == "均值":
+                agg_val = sum(vals) / len(vals) if vals else 0
+            elif func == "最大值":
+                agg_val = max(vals) if vals else None
+            elif func == "最小值":
+                agg_val = min(vals) if vals else None
+            else:
+                raise ValueError(f"不支持的聚合函数: '{func}'，可选: 求和/均值/计数/最大值/最小值")
 
         row = {col: (str(key[i]) if i < len(key) else '') for i, col in enumerate(group_cols)}
         row[result_col_name] = agg_val
@@ -692,7 +687,7 @@ def execute_group_agg(rows, params):
     "index": {"type": "list", "required": True, "label": "行索引列（支持多选）"},
     "columns": {"type": "str", "required": False, "label": "列索引列"},
     "values": {"type": "str", "required": True, "label": "值列"},
-    "aggfunc": {"type": "str", "required": True, "label": "聚合函数", "options": ["sum", "mean", "count", "max", "min"]}
+    "aggfunc": {"type": "str", "required": True, "label": "聚合函数", "options": ["求和", "均值", "计数", "最大值", "最小值"]}
 })
 def execute_pivot(rows, params):
     index = params.get("index", [])
@@ -703,7 +698,7 @@ def execute_pivot(rows, params):
 
     columns = params.get("columns") or None
     values = params.get("values", "")
-    aggfunc = params.get("aggfunc", "sum")
+    aggfunc = params.get("aggfunc", "求和")
 
     if not values:
         raise ValueError("缺少参数: 值列")
@@ -717,23 +712,18 @@ def execute_pivot(rows, params):
         if columns and columns not in rows[0]:
             raise ValueError(f"列索引列 '{columns}' 不存在")
 
-    _agg_labels = {
-        "sum": "求和",
-        "mean": "均值",
-        "count": "计数",
-        "max": "最大值",
-        "min": "最小值",
-    }
-    agg_label = _agg_labels.get(aggfunc, aggfunc)
-
     if columns:
         pivot_data = {}
         for r in rows:
             row_key = tuple(str(r.get(c, '')) for c in index)
             col_key = str(r.get(columns, ''))
-            val = _to_float(r.get(values))
-            if val is None:
-                continue
+            # 计数聚合不依赖值列数值，直接计数；其他聚合需要校验数值
+            if aggfunc == "计数":
+                val = 1
+            else:
+                val = _to_float(r.get(values))
+                if val is None:
+                    continue
             if row_key not in pivot_data:
                 pivot_data[row_key] = {}
             if col_key not in pivot_data[row_key]:
@@ -744,42 +734,46 @@ def execute_pivot(rows, params):
         for row_key, col_vals in pivot_data.items():
             row = {col: (str(row_key[i]) if i < len(row_key) else '') for i, col in enumerate(index)}
             for col_key, vals in col_vals.items():
-                new_col = f"{agg_label}({values})_{col_key}"
-                if aggfunc == "sum":
+                new_col = f"{aggfunc}({values})_{col_key}"
+                if aggfunc == "求和":
                     row[new_col] = sum(vals)
-                elif aggfunc == "mean":
+                elif aggfunc == "均值":
                     row[new_col] = sum(vals) / len(vals)
-                elif aggfunc == "count":
+                elif aggfunc == "计数":
                     row[new_col] = len(vals)
-                elif aggfunc == "max":
+                elif aggfunc == "最大值":
                     row[new_col] = max(vals)
-                elif aggfunc == "min":
+                elif aggfunc == "最小值":
                     row[new_col] = min(vals)
             result.append(row)
     else:
         pivot_data = {}
         for r in rows:
             row_key = tuple(str(r.get(c, '')) for c in index)
-            val = _to_float(r.get(values))
-            if val is None:
-                continue
+            # 计数聚合不依赖值列数值，直接计数；其他聚合需要校验数值
+            if aggfunc == "计数":
+                val = 1
+            else:
+                val = _to_float(r.get(values))
+                if val is None:
+                    continue
             if row_key not in pivot_data:
                 pivot_data[row_key] = []
             pivot_data[row_key].append(val)
 
-        new_col = f"{agg_label}({values})"
+        new_col = f"{aggfunc}({values})"
         result = []
         for row_key, vals in pivot_data.items():
             row = {col: (str(row_key[i]) if i < len(row_key) else '') for i, col in enumerate(index)}
-            if aggfunc == "sum":
+            if aggfunc == "求和":
                 row[new_col] = sum(vals)
-            elif aggfunc == "mean":
+            elif aggfunc == "均值":
                 row[new_col] = sum(vals) / len(vals)
-            elif aggfunc == "count":
+            elif aggfunc == "计数":
                 row[new_col] = len(vals)
-            elif aggfunc == "max":
+            elif aggfunc == "最大值":
                 row[new_col] = max(vals)
-            elif aggfunc == "min":
+            elif aggfunc == "最小值":
                 row[new_col] = min(vals)
             result.append(row)
 
