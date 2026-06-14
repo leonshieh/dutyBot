@@ -38,7 +38,8 @@ def _execute_duty_task(task):
             if not os.path.exists(path):
                 logger.error(f"[定时-值班通知] 文件不存在: {path}")
                 return
-            message = build_duty_markdown_from_excel(path)
+            message_title = (task['title'] or '').strip() or '值班信息通知'
+            message = build_duty_markdown_from_excel(path, title=message_title)
             if message is None:
                 logger.error(f"[定时-值班通知] 无法解析文件: {path}")
                 return
@@ -46,9 +47,10 @@ def _execute_duty_task(task):
             custom = (task['message_text'] or '').strip()
             if custom:
                 message += '\n\n---\n\n' + custom
-            result = _send_to_bots(bot_ids=bot_ids, title='值班信息通知', message=message, at_all=at_all, log_type='duty')
+            result = _send_to_bots(bot_ids=bot_ids, title=message_title, message=message, at_all=at_all, log_type='duty')
         else:
-            result = send_duty_notification(bot_ids, int(table_id), at_all, (task['message_text'] or ''))
+            message_title = (task['title'] or '').strip() or '值班信息通知'
+            result = send_duty_notification(bot_ids, int(table_id), at_all, (task['message_text'] or ''), title=message_title)
         logger.info(f"[定时-值班通知] task_id={task['id']} -> {result}")
     except Exception as e:
         logger.error(f"[定时-值班通知] task_id={task['id']} 执行异常: {e}")

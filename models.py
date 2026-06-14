@@ -108,8 +108,8 @@ class TimingTaskModel:
         cursor = conn.execute('''
             INSERT INTO timing_tasks
                 (task_type, exec_time, rule, rule_value, enabled,
-                 message_text, bot_ids, at_all, table_id)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+                 message_text, bot_ids, at_all, table_id, title)
+            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
         ''', (
             data['task_type'],
             data['exec_time'],
@@ -119,8 +119,29 @@ class TimingTaskModel:
             data.get('bot_ids', ''),
             data.get('at_all', 0),
             data.get('table_id'),
+            data.get('title', ''),
         ))
         return cursor.lastrowid
+
+    @staticmethod
+    def update(conn, task_id, data):
+        conn.execute('''
+            UPDATE timing_tasks
+            SET exec_time = ?, rule = ?, rule_value = ?,
+                message_text = ?, bot_ids = ?, at_all = ?,
+                table_id = ?, title = ?
+            WHERE id = ?
+        ''', (
+            data['exec_time'],
+            data['rule'],
+            data['rule_value'],
+            data.get('message_text', ''),
+            data.get('bot_ids', ''),
+            data.get('at_all', 0),
+            data.get('table_id'),
+            data.get('title', ''),
+            task_id,
+        ))
 
     @staticmethod
     def update_enabled(conn, task_id, enabled):

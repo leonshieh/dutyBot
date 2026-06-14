@@ -17,7 +17,7 @@ from config import APP_CONFIG
 logger = logging.getLogger(__name__)
 
 
-def _build_duty_markdown(table_id):
+def _build_duty_markdown(table_id, title=None):
     """根据值班表构建今日值班 + 下次预告的 Markdown 通知"""
     from datetime import date
     conn = get_connection()
@@ -25,8 +25,9 @@ def _build_duty_markdown(table_id):
     records = DutyTableModel.get_records(conn, int(table_id))
     conn.close()
 
+    heading = title or '值班信息通知'
     if not records:
-        return f"## 值班信息通知\n\n暂无值班信息"
+        return f"## {heading}\n\n暂无值班信息"
 
     today_str = date.today().strftime('%Y/%m/%d')
 
@@ -73,7 +74,7 @@ def _build_duty_markdown(table_id):
     return "\n".join(lines)
 
 
-def build_duty_markdown_from_excel(file_path):
+def build_duty_markdown_from_excel(file_path, title=None):
     """从上传的 Excel 文件构建今日值班 + 下次预告的 Markdown 通知
     格式：第1列=日期，第2列=星期，第3列=人员
     """
@@ -107,8 +108,9 @@ def build_duty_markdown_from_excel(file_path):
             'person': str(row_data[2]).strip(),
         })
 
+    heading = title or '值班信息通知'
     if not records:
-        return f"## 值班信息通知\n\n暂无值班信息"
+        return f"## {heading}\n\n暂无值班信息"
 
     # 查找今日值班记录
     today_idx = None
@@ -117,20 +119,20 @@ def build_duty_markdown_from_excel(file_path):
             today_idx = i
             break
 
-    lines = ['## 值班信息通知', '']
+    lines = [f'## {heading}', '']
     if today_idx is not None:
         r = records[today_idx]
-        lines.append('## **今日值班信息：**')
+        lines.append('<h3> **今日值班信息：**</h3>')    
         lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
     else:
-        lines.append('## **今日值班信息：**')
+        lines.append('<h3> **今日值班信息：**</h3>')
         lines.append(f"今日（{today_str}）暂无值班安排")
 
     # 下一次值班（今天之后的第一条）
     next_idx = None
     if today_idx is not None and today_idx + 1 < len(records):
         next_idx = today_idx + 1
-    else:
+    else:   
         for i, r in enumerate(records):
             if r['duty_date'] > today_str:
                 next_idx = i
@@ -139,9 +141,9 @@ def build_duty_markdown_from_excel(file_path):
     if next_idx is not None:
         r = records[next_idx]
         lines.append('')
-        lines.append('---')
+        #lines.append('---')
         lines.append('')
-        lines.append('## **下次值班预告：**')
+        lines.append('<h3> **下次值班预告：**</h3>')
         lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
 
     lines.append('')
@@ -152,18 +154,18 @@ def build_duty_markdown_from_excel(file_path):
     return '\n'.join(lines)
 
 
-def send_duty_notification(bot_ids, table_id, at_all=False, custom_text=''):
+def send_duty_notification(bot_ids, table_id, at_all=False, custom_text='', title=None):
     """发送值班通知到指定机器人列表，可选拼接自定义文本"""
-    message = _build_duty_markdown(table_id)
+    message_title = title or '值班信息通知'
+    message = _build_duty_markdown(table_id, title=message_title)
     if custom_text and custom_text.strip():
         message += '\n\n---\n\n' + custom_text.strip()
     conn = get_connection()
     table = DutyTableModel.get_by_id(conn, int(table_id))
     conn.close()
-    title = '值班信息通知'
     return _send_to_bots(
         bot_ids=bot_ids,
-        title=title,
+        title=message_title,
         message=message,
         at_all=at_all,
         log_type='duty',

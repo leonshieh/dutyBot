@@ -106,9 +106,9 @@ def remove_duty_table(table_id):
 # ==================== 消息发送 ====================
 
 @eel.expose
-def send_duty_notification_eel(bot_ids, table_id, at_all=False, custom_text=''):
-    """发送值班通知，可选拼接自定义文本"""
-    return send_duty_notification(bot_ids, table_id, at_all, custom_text)
+def send_duty_notification_eel(bot_ids, table_id, at_all=False, custom_text='', title=''):
+    """发送值班通知，可选拼接自定义文本和自定义标题"""
+    return send_duty_notification(bot_ids, table_id, at_all, custom_text, title or None)
 
 
 @eel.expose
@@ -118,14 +118,14 @@ def send_custom_message_eel(bot_ids, message_text, at_all=False):
 
 
 @eel.expose
-def build_duty_markdown_for_file(file_name):
+def build_duty_markdown_for_file(file_name, title=None):
     """为上传的值班表文件构建今日+下次值班 Markdown"""
     import os
     from message_sender import build_duty_markdown_from_excel
     path = os.path.join(_UPLOADS_DIR, file_name)
     if not os.path.exists(path):
         return {'success': False, 'error': f'文件不存在: {file_name}'}
-    md = build_duty_markdown_from_excel(path)
+    md = build_duty_markdown_from_excel(path, title=title)
     if md is None:
         return {'success': False, 'error': f'无法解析文件: {file_name}'}
     return {'success': True, 'markdown': md}
@@ -162,6 +162,27 @@ def remove_timing_task(task_id):
 
     remove_job_for_task(int(task_id))
     return {'success': True}
+
+
+@eel.expose
+def update_timing_task(task_id, task_data):
+    """更新定时任务并重建调度 Job"""
+    conn = get_connection()
+    TimingTaskModel.update(conn, int(task_id), task_data)
+    conn.commit()
+
+    # 获取更新后的 task 信息
+    task = conn.execute(
+        'SELECT * FROM timing_tasks WHERE id = ?', (int(task_id),)
+    ).fetchone()
+    conn.close()
+
+    # 先移除旧 Job，再按新配置注册
+    remove_job_for_task(int(task_id))
+    if task and task['enabled']:
+        add_job_for_task(task)
+
+    return {'success': True, 'id': int(task_id)}
 
 
 @eel.expose
@@ -235,6 +256,9 @@ def _get_tasks_for_frontend(task_type):
             'tableId': t['table_id'],
             'at_all': bool(t['at_all']),
             'atAll': bool(t['at_all']),
+            'title': t['title'] or '',
+            'exec_time': t['exec_time'],
+            'rule_value': t['rule_value'],
         }
         for t in tasks
     ]
@@ -578,6 +602,133 @@ def delete_workflow(wf_id):
     conn.commit()
     conn.close()
     return {'success': True}
+
+
+@eel.expose
+def export_workflow(wf_id):
+    """导出单个工作流为 JSON 字符串"""
+    conn = get_connection()
+    row = conn.execute('SELECT * FROM workflows WHERE id = ?', (str(wf_id),)).fetchone()
+    conn.close()
+    if not row:
+        return {'success': False, 'error': '工作流不存在'}
+    export_data = {
+        "version": "1.0",
+        "type": "dutybot_workflow",
+        "name": row['name'],
+        "exported_at": _datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        "nodes": _json.loads(row['nodes']),
+    }
+    return {
+        'success': True,
+        'json_str': _json.dumps(export_data, ensure_ascii=False, indent=2),
+        'file_name': f"{row['name']}_数据流.json",
+    }
+
+
+@eel.expose
+def export_all_workflows():
+    """导出所有工作流为 JSON 字符串"""
+    conn = get_connection()
+    rows = conn.execute('SELECT * FROM workflows ORDER BY created_at DESC').fetchall()
+    conn.close()
+    if not rows:
+        return {'success': False, 'error': '没有可导出的工作流'}
+    workflows = []
+    for row in rows:
+        workflows.append({
+            "name": row['name'],
+            "created_at": row['created_at'],
+            "nodes": _json.loads(row['nodes']),
+        })
+    export_data = {
+        "version": "1.0",
+        "type": "dutybot_workflow_batch",
+        "exported_at": _datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        "count": len(workflows),
+        "workflows": workflows,
+    }
+    return {
+        'success': True,
+        'json_str': _json.dumps(export_data, ensure_ascii=False, indent=2),
+        'file_name': f"全部数据流_{_datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+    }
+
+
+@eel.expose
+def import_workflow(json_str):
+    """从 JSON 字符串导入工作流（支持单个或批量）"""
+    try:
+        data = _json.loads(json_str)
+    except _json.JSONDecodeError as e:
+        return {'success': False, 'error': f'JSON 解析失败: {str(e)}'}
+
+    # 校验类型
+    if data.get('type') not in ('dutybot_workflow', 'dutybot_workflow_batch'):
+        return {'success': False, 'error': '不支持的文件格式，请导入 dutybot_workflow 格式的 JSON 文件'}
+
+    # 统一为列表处理
+    if data['type'] == 'dutybot_workflow':
+        workflow_list = [{'name': data.get('name', '未命名工作流'), 'nodes': data.get('nodes', [])}]
+    else:
+        workflow_list = data.get('workflows', [])
+
+    if not workflow_list:
+        return {'success': False, 'error': '文件中没有可导入的工作流'}
+
+    # 校验节点类型
+    unknown_types = set()
+    for wf in workflow_list:
+        for node in wf.get('nodes', []):
+            if node.get('type') not in NODE_REGISTRY:
+                unknown_types.add(node['type'])
+
+    if unknown_types:
+        return {
+            'success': False,
+            'error': f'文件中包含未知的节点类型: {", ".join(sorted(unknown_types))}，请确保目标环境已安装对应的节点定义',
+        }
+
+    conn = get_connection()
+    imported = []
+    skipped = []
+
+    for wf in workflow_list:
+        name = wf.get('name', '未命名工作流').strip()
+        nodes = wf.get('nodes', [])
+        if not name:
+            continue
+
+        # 检查重名
+        existing = conn.execute(
+            'SELECT id FROM workflows WHERE name = ?', (name,)
+        ).fetchone()
+        if existing:
+            skipped.append(name)
+            continue
+
+        wf_id = str(_uuid.uuid4())
+        conn.execute(
+            'INSERT INTO workflows (id, name, nodes) VALUES (?, ?, ?)',
+            (wf_id, name, _json.dumps(nodes, ensure_ascii=False))
+        )
+        imported.append(name)
+
+    conn.commit()
+    conn.close()
+
+    result_msg_parts = []
+    if imported:
+        result_msg_parts.append(f'成功导入 {len(imported)} 个: {", ".join(imported)}')
+    if skipped:
+        result_msg_parts.append(f'跳过 {len(skipped)} 个重名: {", ".join(skipped)}')
+
+    return {
+        'success': True,
+        'imported': imported,
+        'skipped': skipped,
+        'message': '; '.join(result_msg_parts) if result_msg_parts else '没有可导入的工作流',
+    }
 
 
 @eel.expose

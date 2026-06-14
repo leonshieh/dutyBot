@@ -1179,6 +1179,10 @@
                         </div>
                         <hr class="card-divider">
                         <div class="form-group">
+                            <label class="form-label">消息标题 <span style="font-weight:400;color:var(--text-muted);">（可选，默认为"值班信息通知"）</span></label>
+                            <input type="text" id="dutyTitle" placeholder="输入自定义消息标题..." style="max-width:320px;">
+                        </div>
+                        <div class="form-group">
                             <label class="form-label">附加消息 <span style="font-weight:400;color:var(--text-muted);">（可选，将拼接在值班信息后）</span></label>
                             <textarea id="dutyCustomText" placeholder="输入要附加的自定义内容（支持 Markdown）..." style="min-height:60px;"></textarea>
                         </div>
@@ -1350,9 +1354,15 @@
                     </div>
                 </div>
                 <div class="card" id="dataWorkflowListCard">
-                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>已保存数据流</span></div>
+                    <div class="card-header"><span class="card-header-title"><span class="dot"></span>已保存数据流</span>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-outline btn-sm" onclick="importWorkflowTrigger()">📥 导入数据流</button>
+                            <button class="btn btn-outline btn-sm" onclick="exportAllWorkflows()">📤 导出全部</button>
+                        </div>
+                    </div>
                     <div class="card-body"><div class="task-list" id="dataWorkflowList"></div></div>
                 </div>
+                <input type="file" id="workflowFileInput" accept=".json" style="display:none;" onchange="handleWorkflowFileImport(event)">
             </div>
 
             <!-- ========== 机器人配置面板 ========== -->
@@ -1397,6 +1407,10 @@
                     <label class="form-label" id="timingContentLabel">发送内容 <span class="required">*</span></label>
                     <select id="timingTableSelect" style="display:none;"><option value="">-- 请选择值班信息表 --</option></select>
                     <textarea id="timingMessageText" style="display:none;" placeholder="请输入要发送的消息内容..."></textarea>
+                </div>
+                <div class="form-group" id="timingTitleDiv" style="display:none;">
+                    <label class="form-label">消息标题 <span style="font-weight:400;color:var(--text-muted);">（可选，默认为"值班信息通知"）</span></label>
+                    <input type="text" id="timingTitle" placeholder="输入自定义消息标题..." style="max-width:320px;">
                 </div>
                 <div class="form-group" id="timingCustomTextDiv" style="display:none;">
                     <label class="form-label">附加消息 <span style="font-weight:400;color:var(--text-muted);">（可选）</span></label>
@@ -1566,6 +1580,7 @@
         let customLogs = [];
         let dutyTableFiles = [];
         let pendingTimingTaskType = null;
+        let editingTaskId = null;
         let editingBotId = null;
 
         const WEBHOOK_EXTERNAL = 'https://oapi.dingtalk.com/robot/send?access_token=';
@@ -1860,6 +1875,7 @@
                     </span>
                     <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                         <label class="tg-wrap"><input type="checkbox" ${t.enabled?'checked':''} onchange="toggleTaskEnabled(${t.id}, this.checked)"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
+                        <button class="btn btn-outline btn-xs" onclick="editTimingTask(${t.id}, 'duty')">编辑</button>
                         <button class="btn btn-danger btn-xs" onclick="removeTask(${t.id}, 'duty')">删除</button>
                     </span>
                 </div>`).join('');
@@ -1878,6 +1894,7 @@
                     </span>
                     <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                         <label class="tg-wrap"><input type="checkbox" ${t.enabled?'checked':''} onchange="toggleTaskEnabled(${t.id}, this.checked)"><span class="tg-btn" data-tg-off="OFF" data-tg-on="ON"></span></label>
+                        <button class="btn btn-outline btn-xs" onclick="editTimingTask(${t.id}, 'custom')">编辑</button>
                         <button class="btn btn-danger btn-xs" onclick="removeTask(${t.id}, 'custom')">删除</button>
                     </span>
                 </div>`).join('');
@@ -1896,6 +1913,9 @@
                     const table = dutyTableFiles.find(f => f.id == tableId);
                     if (table) tags.push(`<span class="task-tag tag-content">${escapeHtml(table.name || table.file_name || '值班表')}</span>`);
                 }
+                // 显示自定义标题（如果有）
+                const title = t.title || '';
+                if (title && title !== '值班信息通知') tags.push(`<span class="task-tag tag-content">📋 ${escapeHtml(title.length > 20 ? title.slice(0, 20) + '...' : title)}</span>`);
                 // 显示自定义附加文本（如果有）
                 const customText = t.message_text || t.messageText || '';
                 if (customText) tags.push(`<span class="task-tag tag-content">💬 ${escapeHtml(customText.length > 30 ? customText.slice(0, 30) + '...' : customText)}</span>`);
@@ -1927,7 +1947,83 @@
             }
         }
 
+        function editTimingTask(taskId, type) {
+            // 找到对应的任务数据
+            const tasks = type === 'duty' ? dutyTasks : customTasks;
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return showToast('任务不存在', 'error');
+
+            editingTaskId = taskId;
+            pendingTimingTaskType = type;
+            document.getElementById('timingTaskModalTitle').textContent = '编辑定时任务';
+            document.getElementById('timingTaskConfirmBtn').textContent = '确认修改';
+
+            // 预填时间
+            document.getElementById('timingTaskTime').value = task.exec_time || task.time || '09:00';
+
+            // 预填规则
+            document.querySelectorAll('.timing-rule-chip').forEach(c => c.classList.remove('selected'));
+            const ruleValue = task.rule_value || task.ruleValue || 'daily';
+            if (ruleValue === 'weekly') {
+                const chip = document.querySelector('.timing-rule-chip[data-rule="weekly"]');
+                if (chip) chip.classList.add('selected');
+                document.getElementById('timingWeeklyDetail').classList.add('show');
+                // 预填星期复选框
+                const daysStr = ruleValue.replace('weekly_', '');
+                const selectedDays = daysStr.split(',').filter(Boolean);
+                document.querySelectorAll('#timingWeekdayCheckboxes input').forEach(cb => {
+                    cb.checked = selectedDays.includes(cb.value);
+                });
+            } else {
+                const chip = document.querySelector(`.timing-rule-chip[data-rule="${ruleValue}"]`);
+                if (chip) chip.classList.add('selected');
+                document.getElementById('timingWeeklyDetail').classList.remove('show');
+            }
+
+            // 预填 @所有人
+            const atAll = task.at_all || task.atAll;
+            document.getElementById('timingAtAllToggle').checked = atAll;
+            updateToggleLabel(document.getElementById('timingAtAllToggle'), 'timingAtAllLabel');
+
+            // 渲染机器人和内容区域
+            _renderTimingBotCheckboxes();
+            _renderTimingContent(type).then(() => {
+                // 预填机器人选择
+                const botIds = (task.bot_ids || task.botIds || '').toString().split(',').filter(Boolean).map(Number);
+                document.querySelectorAll('.timing-bot-checkbox').forEach(cb => {
+                    cb.checked = botIds.includes(parseInt(cb.value));
+                });
+
+                if (type === 'duty') {
+                    // 预填值班表
+                    const tableId = task.table_id || task.tableId;
+                    if (tableId) {
+                        const sel = document.getElementById('timingTableSelect');
+                        // 遍历选项匹配值
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value == tableId) {
+                                sel.selectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                    // 预填标题
+                    const titleEl = document.getElementById('timingTitle');
+                    if (titleEl) titleEl.value = task.title || '';
+                    // 预填附加文本
+                    const customEl = document.getElementById('timingCustomText');
+                    if (customEl) customEl.value = task.message_text || task.messageText || '';
+                } else {
+                    const msgEl = document.getElementById('timingMessageText');
+                    if (msgEl) msgEl.value = task.message_text || task.messageText || '';
+                }
+            });
+
+            document.getElementById('timingTaskModalOverlay').classList.remove('hidden');
+        }
+
         function addTimingTask(type) {
+            editingTaskId = null;
             pendingTimingTaskType = type;
             document.getElementById('timingTaskModalTitle').textContent = '添加定时任务';
             document.getElementById('timingTaskConfirmBtn').textContent = '确认添加';
@@ -1941,6 +2037,8 @@
             updateToggleLabel(document.getElementById('timingAtAllToggle'), 'timingAtAllLabel');
             const customEl = document.getElementById('timingCustomText');
             if (customEl) customEl.value = '';
+            const titleEl = document.getElementById('timingTitle');
+            if (titleEl) titleEl.value = '';
             _renderTimingBotCheckboxes();
             _renderTimingContent(type);
             document.getElementById('timingTaskModalOverlay').classList.remove('hidden');
@@ -1961,10 +2059,12 @@
             const msgText = document.getElementById('timingMessageText');
             const label = document.getElementById('timingContentLabel');
             const customDiv = document.getElementById('timingCustomTextDiv');
+            const titleDiv = document.getElementById('timingTitleDiv');
             if (type === 'duty') {
                 label.textContent = '值班信息表 *';
                 tableSel.style.display = '';
                 msgText.style.display = 'none';
+                if (titleDiv) titleDiv.style.display = '';
                 if (customDiv) customDiv.style.display = '';
                 tableSel.innerHTML = '<option value="">-- 请选择值班信息表 --</option>';
                 dutyTableFiles.forEach(f => {
@@ -1991,6 +2091,7 @@
                 label.textContent = '消息内容 *';
                 tableSel.style.display = 'none';
                 msgText.style.display = '';
+                if (titleDiv) titleDiv.style.display = 'none';
                 if (customDiv) customDiv.style.display = 'none';
                 msgText.value = '';
             }
@@ -2011,6 +2112,7 @@
         function closeTimingTaskModal() {
             document.getElementById('timingTaskModalOverlay').classList.add('hidden');
             pendingTimingTaskType = null;
+            editingTaskId = null;
         }
 
         async function confirmTimingTask() {
@@ -2024,9 +2126,13 @@
             // 收集发送内容
             let message_text = '';
             let table_id = null;
+            let title = '';
             if (pendingTimingTaskType === 'duty') {
                 table_id = document.getElementById('timingTableSelect').value;
                 if (!table_id) return showToast('请选择值班信息表', 'error');
+                // 自定义标题（可选）
+                const titleEl = document.getElementById('timingTitle');
+                if (titleEl) title = titleEl.value.trim();
                 // 自定义附加文本（可选）
                 const customEl = document.getElementById('timingCustomText');
                 if (customEl) message_text = customEl.value.trim();
@@ -2062,17 +2168,25 @@
                 message_text: message_text,
                 table_id: table_id || null,
                 at_all: at_all ? 1 : 0,
+                title: title,
             };
 
             try {
-                const result = await eel.add_timing_task(taskData)();
+                let result;
+                if (editingTaskId) {
+                    result = await eel.update_timing_task(editingTaskId, taskData)();
+                } else {
+                    result = await eel.add_timing_task(taskData)();
+                }
                 if (result.success) {
                     await reloadData();
                     closeTimingTaskModal();
-                    showToast(`已添加定时任务：${time} ${ruleDisplay}`, 'success');
+                    const action = editingTaskId ? '已更新' : '已添加';
+                    showToast(`${action}定时任务：${time} ${ruleDisplay}`, 'success');
                 }
             } catch (err) {
-                showToast('添加失败：' + err, 'error');
+                const action = editingTaskId ? '修改' : '添加';
+                showToast(`${action}失败：` + err, 'error');
             }
         }
 
@@ -2083,6 +2197,7 @@
                 const tableId = document.getElementById('dutyTableSelect').value;
                 const atAll = document.getElementById('dutyAtAllToggle').checked;
                 const customText = document.getElementById('dutyCustomText').value.trim();
+                const title = document.getElementById('dutyTitle').value.trim();
                 if (botIds.length === 0) return showToast('请至少选择一个机器人', 'error');
                 if (!tableId) return showToast('请选择值班信息表', 'error');
                 try {
@@ -2090,13 +2205,14 @@
                     if (tableId.startsWith('upload:')) {
                         // 已上传文件：使用值班表专用函数构建今日+下次值班 Markdown
                         const fileName = tableId.replace('upload:', '');
-                        const md = await eel.build_duty_markdown_for_file(fileName)();
+                        const md = await eel.build_duty_markdown_for_file(fileName, title || null)();
                         if (!md.success) return showToast('构建值班消息失败: ' + (md.error || ''), 'error');
                         let msg = md.markdown;
                         if (customText) msg += '\n\n---\n\n' + customText;
+                        // 对于已上传文件，通过自定义消息发送（标题在 build_duty_markdown_for_file 中已处理）
                         result = await eel.send_custom_message_eel(botIds, msg, atAll)();
                     } else {
-                        result = await eel.send_duty_notification_eel(botIds, tableId, atAll, customText)();
+                        result = await eel.send_duty_notification_eel(botIds, tableId, atAll, customText, title)();
                     }
                     await reloadLogs();
                     showToast(result.success ? `发送成功 → ${result.bot_names}` : '发送失败: ' + (result.error || ''),
@@ -2897,6 +3013,7 @@
                                 <span style="flex:1;font-weight:600;">${escapeHtml(wf.name)}</span>
                                 <span style="font-size:11px;color:var(--text-muted);">${wf.nodes.length} 步骤 · ${wf.created_at}</span>
                                 <button class="btn btn-outline btn-xs" onclick="applyWorkflow(${i})">加载</button>
+                                <button class="btn btn-outline btn-xs" onclick="exportWorkflowByIndex(${i})">导出</button>
                                 <button class="btn btn-danger btn-xs" onclick="deleteWorkflowByIndex(${i})">删除</button>
                             </div>
                             <div style="display:flex;gap:4px;flex-wrap:wrap;">${tags}</div>
@@ -2924,6 +3041,71 @@
             } catch (err) {
                 showToast('删除失败: ' + err, 'error');
             }
+        }
+
+        async function exportWorkflowByIndex(idx) {
+            const wf = dataWorkflows[idx];
+            if (!wf) return;
+            try {
+                const result = await eel.export_workflow(wf.id)();
+                if (result.success) {
+                    const blob = new Blob([result.json_str], { type: 'application/json;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = result.file_name;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast(`工作流「${wf.name}」已导出`, 'success');
+                } else {
+                    showToast('导出失败: ' + result.error, 'error');
+                }
+            } catch (err) {
+                showToast('导出失败: ' + err, 'error');
+            }
+        }
+
+        async function exportAllWorkflows() {
+            try {
+                const result = await eel.export_all_workflows()();
+                if (result.success) {
+                    const blob = new Blob([result.json_str], { type: 'application/json;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = result.file_name;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('全部工作流已导出', 'success');
+                } else {
+                    showToast('导出失败: ' + result.error, 'error');
+                }
+            } catch (err) {
+                showToast('导出失败: ' + err, 'error');
+            }
+        }
+
+        function importWorkflowTrigger() {
+            document.getElementById('workflowFileInput').click();
+        }
+
+        async function handleWorkflowFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const result = await eel.import_workflow(text)();
+                if (result.success) {
+                    await loadWorkflowList();
+                    showToast(result.message, 'success');
+                } else {
+                    showToast('导入失败: ' + result.error, 'error');
+                }
+            } catch (err) {
+                showToast('导入失败: ' + err, 'error');
+            }
+            // 重置 input，允许重复选择同一文件
+            event.target.value = '';
         }
 
         // ============ 消息流编排 ============

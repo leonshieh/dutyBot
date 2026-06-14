@@ -71,9 +71,16 @@ def init_database():
             bot_ids TEXT DEFAULT '',
             at_all INTEGER DEFAULT 0,
             table_id INTEGER DEFAULT NULL,
+            title TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    # 迁移：为已有表添加 title 列（如果不存在）
+    try:
+        cursor.execute('ALTER TABLE timing_tasks ADD COLUMN title TEXT DEFAULT ""')
+    except sqlite3.OperationalError:
+        pass  # 列已存在，忽略
 
     # ---- 发送日志表 ----
     cursor.execute('''
