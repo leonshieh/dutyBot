@@ -74,9 +74,14 @@ def _build_duty_markdown(table_id, title=None):
     return "\n".join(lines)
 
 
-def build_duty_markdown_from_excel(file_path, title=None):
+def build_duty_markdown_from_excel(file_path, title=None, sheet_name=None):
     """从上传的 Excel 文件构建今日值班 + 下次预告的 Markdown 通知
     格式：第1列=日期，第2列=星期，第3列=人员
+    
+    Args:
+        file_path: Excel 文件路径
+        title: 通知标题
+        sheet_name: 工作表名称，None 表示使用活动工作表
     """
     import os
     import re
@@ -87,7 +92,10 @@ def build_duty_markdown_from_excel(file_path, title=None):
         return None
 
     wb = openpyxl.load_workbook(file_path, read_only=True)
-    ws = wb.active
+    if sheet_name and sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+    else:
+        ws = wb.active
     all_rows_data = list(ws.iter_rows(values_only=True))
     wb.close()
 

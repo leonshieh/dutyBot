@@ -118,14 +118,14 @@ def send_custom_message_eel(bot_ids, message_text, at_all=False):
 
 
 @eel.expose
-def build_duty_markdown_for_file(file_name, title=None):
+def build_duty_markdown_for_file(file_name, title=None, sheet_name=None):
     """为上传的值班表文件构建今日+下次值班 Markdown"""
     import os
     from message_sender import build_duty_markdown_from_excel
     path = os.path.join(_UPLOADS_DIR, file_name)
     if not os.path.exists(path):
         return {'success': False, 'error': f'文件不存在: {file_name}'}
-    md = build_duty_markdown_from_excel(path, title=title)
+    md = build_duty_markdown_from_excel(path, title=title, sheet_name=sheet_name)
     if md is None:
         return {'success': False, 'error': f'无法解析文件: {file_name}'}
     return {'success': True, 'markdown': md}
@@ -343,16 +343,20 @@ _current_rows = None   # 当前处理结果（用于预览展示）
 _current_file_name = None
 
 
-def _read_excel_to_rows(file_path, header=0, skip_rows=0):
+def _read_excel_to_rows(file_path, header=0, skip_rows=0, sheet_name=None):
     """用 openpyxl 读取 Excel 文件，返回 (rows_list, columns_list)
     
     Args:
         file_path: Excel 文件路径
         header: 表头行号（相对于 skip_rows 之后，0 表示第一行数据为表头）
         skip_rows: 跳过前 N 行
+        sheet_name: 工作表名称，None 表示使用活动工作表
     """
     wb = _openpyxl.load_workbook(file_path, read_only=True)
-    ws = wb.active
+    if sheet_name and sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+    else:
+        ws = wb.active
 
     # 读取所有行数据
     all_rows = []
@@ -489,7 +493,22 @@ def _serialize_rows_for_json(rows, max_rows=50):
 # ==================== Excel 上传与处理 ====================
 
 @eel.expose
-def upload_excel(file_name, file_b64, header_row=None, skip_rows=None):
+def get_excel_sheets(file_name):
+    """获取已上传 Excel 文件的工作表名称列表"""
+    path = _os.path.join(_UPLOADS_DIR, file_name)
+    if not _os.path.exists(path):
+        return {'success': False, 'error': f'文件不存在: {file_name}'}
+    try:
+        wb = _openpyxl.load_workbook(path, read_only=True)
+        sheets = wb.sheetnames
+        wb.close()
+        return {'success': True, 'sheets': sheets, 'active_sheet': sheets[0] if sheets else None}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+@eel.expose
+def upload_excel(file_name, file_b64, header_row=None, skip_rows=None, sheet_name=None):
     """上传 Excel 文件，返回列名列表"""
     global _original_rows, _current_rows, _current_file_name
     try:
@@ -507,8 +526,14 @@ def upload_excel(file_name, file_b64, header_row=None, skip_rows=None):
 
         header = int(header_row) if header_row is not None and int(header_row) >= 0 else 0
         skip = int(skip_rows) if skip_rows is not None and int(skip_rows) >= 0 else 0
-        _current_rows, columns = _read_excel_to_rows(file_path, header=header, skip_rows=skip)
+        _current_rows, columns = _read_excel_to_rows(file_path, header=header, skip_rows=skip, sheet_name=sheet_name)
         _current_file_name = final_name
+
+        # 获取所有 sheet 名称
+        wb = _openpyxl.load_workbook(file_path, read_only=True)
+        all_sheets = wb.sheetnames
+        used_sheet = sheet_name if sheet_name and sheet_name in all_sheets else all_sheets[0] if all_sheets else 'Sheet1'
+        wb.close()
 
         # 自动检测日期列并转换
         _current_rows = _auto_convert_datetime_cols(_current_rows)
@@ -519,8 +544,8 @@ def upload_excel(file_name, file_b64, header_row=None, skip_rows=None):
         # 保存元数据
         meta_path = file_path + '.meta.json'
         with open(meta_path, 'w') as mf:
-            _json.dump({'row_count': row_count, 'header_row': header, 'skip_rows': skip}, mf)
-        return {'success': True, 'columns': columns, 'row_count': row_count, 'file_name': final_name}
+            _json.dump({'row_count': row_count, 'header_row': header, 'skip_rows': skip, 'sheet_name': used_sheet}, mf)
+        return {'success': True, 'columns': columns, 'row_count': row_count, 'file_name': final_name, 'sheets': all_sheets, 'active_sheet': used_sheet}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -761,20 +786,22 @@ def list_uploaded_files():
         for f, path, mtime in items:
             mtime_str = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
             row_count = 0
+            sheet_name = ''
             meta_path = path + '.meta.json'
             if _os.path.exists(meta_path):
                 try:
                     with open(meta_path, 'r') as mf:
                         meta = _json.load(mf)
                         row_count = meta.get('row_count', 0)
+                        sheet_name = meta.get('sheet_name', '')
                 except Exception:
                     pass
-            files.append({'name': f, 'path': path, 'mtime': mtime_str, 'row_count': row_count})
+            files.append({'name': f, 'path': path, 'mtime': mtime_str, 'row_count': row_count, 'sheet_name': sheet_name})
     return files
 
 
 @eel.expose
-def select_uploaded_file(file_name, header_row=None, skip_rows=None):
+def select_uploaded_file(file_name, header_row=None, skip_rows=None, sheet_name=None):
     """选择已上传的文件，加载为当前数据"""
     global _original_rows, _current_rows, _current_file_name
     path = _os.path.join(_UPLOADS_DIR, file_name)
@@ -783,34 +810,39 @@ def select_uploaded_file(file_name, header_row=None, skip_rows=None):
     try:
         # 读取已有元数据获取默认值
         meta_path = path + '.meta.json'
-        if header_row is None and _os.path.exists(meta_path):
+        if _os.path.exists(meta_path):
             try:
                 with open(meta_path, 'r') as mf:
                     meta = _json.load(mf)
-                    header_row = meta.get('header_row', 0)
-                    skip_rows = meta.get('skip_rows', 0)
+                    if header_row is None:
+                        header_row = meta.get('header_row', 0)
+                    if skip_rows is None:
+                        skip_rows = meta.get('skip_rows', 0)
+                    if sheet_name is None:
+                        sheet_name = meta.get('sheet_name', None)
             except Exception:
                 pass
         header = int(header_row) if header_row is not None and int(header_row) >= 0 else 0
         skip = int(skip_rows) if skip_rows is not None and int(skip_rows) >= 0 else 0
-        _current_rows, columns = _read_excel_to_rows(path, header=header, skip_rows=skip)
+        _current_rows, columns = _read_excel_to_rows(path, header=header, skip_rows=skip, sheet_name=sheet_name)
         _current_file_name = file_name
 
         _current_rows = _auto_convert_datetime_cols(_current_rows)
         _original_rows = [{**r} for r in _current_rows]
 
         row_count = len(_current_rows)
+        used_sheet = sheet_name or '默认Sheet'
         with open(meta_path, 'w') as mf:
-            _json.dump({'row_count': row_count, 'header_row': header, 'skip_rows': skip}, mf)
-        return {'success': True, 'columns': columns, 'row_count': row_count, 'file_name': file_name}
+            _json.dump({'row_count': row_count, 'header_row': header, 'skip_rows': skip, 'sheet_name': sheet_name}, mf)
+        return {'success': True, 'columns': columns, 'row_count': row_count, 'file_name': file_name, 'active_sheet': used_sheet}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
 
 @eel.expose
-def reparse_uploaded_file(file_name, header_row=0, skip_rows=0):
-    """重新解析已上传文件（更新表头/跳过行设置）"""
-    return select_uploaded_file(file_name, int(header_row), int(skip_rows))
+def reparse_uploaded_file(file_name, header_row=0, skip_rows=0, sheet_name=None):
+    """重新解析已上传文件（更新表头/跳过行/工作表设置）"""
+    return select_uploaded_file(file_name, int(header_row), int(skip_rows), sheet_name)
 
 
 @eel.expose

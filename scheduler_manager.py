@@ -39,7 +39,18 @@ def _execute_duty_task(task):
                 logger.error(f"[定时-值班通知] 文件不存在: {path}")
                 return
             message_title = (task['title'] or '').strip() or '值班信息通知'
-            message = build_duty_markdown_from_excel(path, title=message_title)
+            # 读取元数据中的 sheet_name
+            sheet_name = None
+            try:
+                meta_path = path + '.meta.json'
+                if os.path.exists(meta_path):
+                    import json
+                    with open(meta_path, 'r') as mf:
+                        meta = json.load(mf)
+                        sheet_name = meta.get('sheet_name', None)
+            except Exception:
+                pass
+            message = build_duty_markdown_from_excel(path, title=message_title, sheet_name=sheet_name)
             if message is None:
                 logger.error(f"[定时-值班通知] 无法解析文件: {path}")
                 return

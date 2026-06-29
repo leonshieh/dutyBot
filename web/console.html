@@ -1303,7 +1303,7 @@
                             <input type="file" id="dataFileInput" accept=".xlsx, .xls" style="flex:1;">
                             <button class="btn btn-primary" onclick="uploadDataFile()">上传并解析</button>
                         </div>
-                        <div class="form-row" style="align-items:flex-end;">
+                        <div class="form-row">
                             <div class="form-group" style="max-width:140px;flex:0 0 auto;">
                                 <label class="form-label">表头行号</label>
                                 <input type="number" id="uploadHeaderRow" value="0" min="0" style="width:80px;" title="0=第一行作为表头">
@@ -1311,6 +1311,12 @@
                             <div class="form-group" style="max-width:140px;flex:0 0 auto;">
                                 <label class="form-label">跳过行数</label>
                                 <input type="number" id="uploadSkipRows" value="0" min="0" style="width:80px;" title="跳过表格前N行（合并标题行等）">
+                            </div>
+                            <div class="form-group" style="max-width:180px;flex:0 0 auto;">
+                                <label class="form-label">工作表（Sheet）</label>
+                                <select id="uploadSheetSelect" style="width:160px;" onchange="onUploadSheetChange(this.value)" title="选择要解析的工作表">
+                                    <option value="">（自动选择）</option>
+                                </select>
                             </div>
                             <span style="font-size:11px;color:var(--text-muted);">遇到合并单元格标题行？设置表头行号和跳过行数</span>
                         </div>
@@ -1335,6 +1341,9 @@
                         <div class="form-row">
                             <select id="dataFileSelect" style="max-width:320px;" onchange="onDataFileSelect(this.value)">
                                 <option value="">-- 请选择已上传的文件 --</option>
+                            </select>
+                            <select id="dataFileSheetSelect" style="max-width:180px;display:none;" onchange="onDataFileSheetChange(this.value)" title="选择工作表">
+                                <option value="">（自动选择）</option>
                             </select>
                             <span id="dataFileSelectInfo" style="font-size:12px;color:var(--text-muted);"></span>
                         </div>
@@ -2483,6 +2492,7 @@
         let dataColumns = [];
         let originalDataColumns = [];
         let dataWorkflows = [];
+        let _currentUploadFileName = '';  // 跟踪当前上传/加载的文件名
         const NODE_USAGE = {
             text_filter:    { desc: '保留指定列中包含关键词的行（不区分大小写）。', example: '列="姓名"，关键词="张" → 保留所有姓张的人' },
             text_replace:   { desc: '将指定列中所有匹配的文本替换为新文本。', example: '列="城市"，原="北京"，新="BJ" → "北京"全部变为"BJ"' },
@@ -2529,16 +2539,25 @@
                 const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
                 const headerRow = document.getElementById('uploadHeaderRow').value || '0';
                 const skipRows = document.getElementById('uploadSkipRows').value || '0';
-                const result = await eel.upload_excel(file.name, b64, headerRow, skipRows)();
+                const sheetSel = document.getElementById('uploadSheetSelect');
+                const sheetName = sheetSel && sheetSel.value ? sheetSel.value : null;
+                const result = await eel.upload_excel(file.name, b64, headerRow, skipRows, sheetName)();
                 if (result.success) {
                     dataColumns = result.columns;
                     originalDataColumns = [...result.columns];
                     dataSteps = [];
+                    _currentUploadFileName = result.file_name;
                     document.getElementById('dataFileInfo').style.display = '';
-                    document.getElementById('dataFileInfo').textContent = `已加载: ${result.file_name} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    let infoText = `已加载: ${result.file_name} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    if (result.active_sheet) infoText += ` · Sheet: ${result.active_sheet}`;
+                    document.getElementById('dataFileInfo').textContent = infoText;
                     document.getElementById('dataResultCard').style.display = '';
                     const prev = await eel.get_current_preview(1, 20)();
                     if (prev.success) _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, 'dataRowCount', prev.page, prev.total_pages);
+                    // 更新 Sheet 下拉框
+                    if (result.sheets && result.sheets.length > 0) {
+                        updateUploadSheetSelect(result.sheets, result.active_sheet);
+                    }
                     refreshFileList();
                     showToast(`已解析 ${result.row_count} 行数据`, 'success');
                 } else {
@@ -2547,6 +2566,40 @@
             } catch (err) {
                 showToast('上传失败: ' + err, 'error');
             }
+        }
+
+        function updateUploadSheetSelect(sheets, activeSheet) {
+            const sel = document.getElementById('uploadSheetSelect');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">（自动选择）</option>';
+            sheets.forEach(s => {
+                sel.innerHTML += `<option value="${escapeHtml(s)}"${s === activeSheet ? ' selected' : ''}>${escapeHtml(s)}</option>`;
+            });
+        }
+
+        async function onUploadSheetChange(sheetName) {
+            // 切换上传区域的 Sheet 后，重新解析当前已加载的文件
+            if (!_currentUploadFileName) return;
+            const headerRow = document.getElementById('uploadHeaderRow').value || '0';
+            const skipRows = document.getElementById('uploadSkipRows').value || '0';
+            try {
+                const result = await eel.reparse_uploaded_file(_currentUploadFileName, headerRow, skipRows, sheetName || null)();
+                if (result.success) {
+                    dataColumns = result.columns;
+                    originalDataColumns = [...result.columns];
+                    dataSteps = [];
+                    document.getElementById('dataFileInfo').style.display = '';
+                    let infoText = `已加载: ${_currentUploadFileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    if (result.active_sheet) infoText += ` · Sheet: ${result.active_sheet}`;
+                    document.getElementById('dataFileInfo').textContent = infoText;
+                    document.getElementById('dataResultCard').style.display = '';
+                    const prev = await eel.get_current_preview(1, 20)();
+                    if (prev.success) _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, 'dataRowCount', prev.page, prev.total_pages);
+                    showToast(`已切换到 Sheet: ${result.active_sheet || sheetName}`, 'info');
+                } else {
+                    showToast(result.error || '切换 Sheet 失败', 'error');
+                }
+            } catch (err) { showToast('切换 Sheet 失败: ' + err, 'error'); }
         }
 
         async function refreshFileList() {
@@ -2561,8 +2614,8 @@
                     html += files.map(f => `
                         <div class="task-item">
                             <span style="flex:1;font-weight:600;"> ${escapeHtml(f.name)}</span>
-                            <span style="font-size:11px;color:var(--text-muted);">${f.row_count||'?'} 行 · ${f.mtime}</span>
-                            <button class="btn btn-ghost btn-xs" onclick="reparseUploadedFile('${escapeHtml(f.name)}')" title="调整表头行/跳过行" style="font-size:14px;padding:3px 6px;">⚙</button>
+                            <span style="font-size:11px;color:var(--text-muted);">${f.row_count||'?'} 行${f.sheet_name ? ' · '+escapeHtml(f.sheet_name) : ''} · ${f.mtime}</span>
+                            <button class="btn btn-ghost btn-xs" onclick="reparseUploadedFile('${escapeHtml(f.name)}')" title="调整表头行/跳过行/工作表" style="font-size:14px;padding:3px 6px;">⚙</button>
                             <button class="btn btn-outline btn-xs" onclick="previewUploadedFile('${escapeHtml(f.name)}')">预览</button>
                             <button class="btn btn-danger btn-xs" onclick="deleteUploadedFile('${escapeHtml(f.name)}')">删除</button>
                         </div>
@@ -2604,13 +2657,35 @@
             if (header === null) return;
             const skip = prompt('跳过前几行：', '0');
             if (skip === null) return;
+            // 获取 Sheet 列表供用户选择
+            let sheetName = null;
             try {
-                const result = await eel.reparse_uploaded_file(fileName, header, skip)();
+                const sheetResult = await eel.get_excel_sheets(fileName)();
+                if (sheetResult.success && sheetResult.sheets && sheetResult.sheets.length > 1) {
+                    const sheetList = sheetResult.sheets.map((s, i) => `${i+1}. ${s}`).join('\n');
+                    const sheetChoice = prompt(`请选择工作表（输入名称或序号）：\n${sheetList}`, sheetResult.sheets[0]);
+                    if (sheetChoice === null) return;
+                    // 判断是序号还是名称
+                    const idx = parseInt(sheetChoice);
+                    if (!isNaN(idx) && idx >= 1 && idx <= sheetResult.sheets.length) {
+                        sheetName = sheetResult.sheets[idx - 1];
+                    } else if (sheetResult.sheets.includes(sheetChoice)) {
+                        sheetName = sheetChoice;
+                    } else {
+                        sheetName = sheetResult.sheets[0];
+                    }
+                }
+            } catch (err) { /* 获取 sheet 失败，使用默认 */ }
+            try {
+                const result = await eel.reparse_uploaded_file(fileName, header, skip, sheetName)();
                 if (result.success) {
                     dataColumns = result.columns;
                     originalDataColumns = [...result.columns];
+                    _currentUploadFileName = fileName;
                     document.getElementById('dataFileInfo').style.display = '';
-                    document.getElementById('dataFileInfo').textContent = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    let infoText = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    if (result.active_sheet) infoText += ` · Sheet: ${result.active_sheet}`;
+                    document.getElementById('dataFileInfo').textContent = infoText;
                     document.getElementById('dataResultCard').style.display = '';
                     const prev = await eel.get_current_preview(1, 20)();
                     if (prev.success) _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, 'dataRowCount', prev.page, prev.total_pages);
@@ -2625,8 +2700,10 @@
                 if (result.success) {
                     dataColumns = result.columns;
                     originalDataColumns = [...result.columns];
+                    _currentUploadFileName = fileName;
                     document.getElementById('dataFileInfo').style.display = '';
-                    document.getElementById('dataFileInfo').textContent = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    let infoText = `已加载: ${fileName} · ${result.columns.length} 列 · ${result.row_count} 行`;
+                    document.getElementById('dataFileInfo').textContent = infoText;
                     document.getElementById('dataResultCard').style.display = '';
                     const prev = await eel.get_current_preview(1, 20)();
                     if (prev.success) _renderTable('dataResultHead', 'dataResultBody', prev.columns, prev.data, prev.row_count, 'dataRowCount', prev.page, prev.total_pages);
@@ -2658,8 +2735,10 @@
 
         async function onDataFileSelect(fileName) {
             const info = document.getElementById('dataFileSelectInfo');
+            const sheetSel = document.getElementById('dataFileSheetSelect');
             if (!fileName) {
                 if (info) info.textContent = '';
+                if (sheetSel) { sheetSel.style.display = 'none'; sheetSel.innerHTML = '<option value="">（自动选择）</option>'; }
                 dataColumns = [];
                 dataSteps = [];
                 renderDataSteps();
@@ -2671,7 +2750,22 @@
                     dataColumns = result.columns;
                     originalDataColumns = [...result.columns];
                     dataSteps = [];
-                    if (info) info.textContent = `${result.columns.length} 列 · ${result.row_count} 行`;
+                    let infoText = `${result.columns.length} 列 · ${result.row_count} 行`;
+                    if (result.active_sheet) infoText += ` · Sheet: ${result.active_sheet}`;
+                    if (info) info.textContent = infoText;
+                    // 获取并填充 Sheet 下拉框
+                    try {
+                        const sheetResult = await eel.get_excel_sheets(fileName)();
+                        if (sheetResult.success && sheetResult.sheets && sheetResult.sheets.length > 1) {
+                            sheetSel.style.display = '';
+                            sheetSel.innerHTML = '<option value="">（自动选择）</option>';
+                            sheetResult.sheets.forEach(s => {
+                                sheetSel.innerHTML += `<option value="${escapeHtml(s)}"${s === result.active_sheet ? ' selected' : ''}>${escapeHtml(s)}</option>`;
+                            });
+                        } else {
+                            sheetSel.style.display = 'none';
+                        }
+                    } catch (err) { sheetSel.style.display = 'none'; }
                     renderDataSteps();
                     showToast(`已选择 ${fileName}`, 'info');
                     // 记住最后选择的文件，下次启动自动恢复
@@ -2680,6 +2774,28 @@
                     showToast(result.error, 'error');
                 }
             } catch (err) { showToast('加载失败: ' + err, 'error'); }
+        }
+
+        async function onDataFileSheetChange(sheetName) {
+            const fileSel = document.getElementById('dataFileSelect');
+            const fileName = fileSel ? fileSel.value : '';
+            if (!fileName) return;
+            try {
+                const result = await eel.select_uploaded_file(fileName, null, null, sheetName || null)();
+                if (result.success) {
+                    dataColumns = result.columns;
+                    originalDataColumns = [...result.columns];
+                    dataSteps = [];
+                    const info = document.getElementById('dataFileSelectInfo');
+                    let infoText = `${result.columns.length} 列 · ${result.row_count} 行`;
+                    if (result.active_sheet) infoText += ` · Sheet: ${result.active_sheet}`;
+                    if (info) info.textContent = infoText;
+                    renderDataSteps();
+                    showToast(`已切换到 Sheet: ${result.active_sheet || sheetName}`, 'info');
+                } else {
+                    showToast(result.error, 'error');
+                }
+            } catch (err) { showToast('切换 Sheet 失败: ' + err, 'error'); }
         }
 
         function addDataStep() {

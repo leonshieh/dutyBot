@@ -25,10 +25,18 @@ def _fmt_date(val):
     return s
 
 
-def parse_xlsx(file_path):
-    """解析 xlsx 文件，返回记录列表"""
+def parse_xlsx(file_path, sheet_name=None):
+    """解析 xlsx 文件，返回记录列表
+    
+    Args:
+        file_path: Excel 文件路径
+        sheet_name: 工作表名称，None 表示使用活动工作表
+    """
     wb = openpyxl.load_workbook(file_path, read_only=True)
-    ws = wb.active
+    if sheet_name and sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+    else:
+        ws = wb.active
     rows = list(ws.iter_rows(min_row=2, values_only=True))
 
     records = []
@@ -43,7 +51,7 @@ def parse_xlsx(file_path):
     return records
 
 
-def parse_xlsx_from_bytes(file_bytes, file_name):
+def parse_xlsx_from_bytes(file_bytes, file_name, sheet_name=None):
     """从字节流解析 xlsx（前端上传场景）"""
     upload_dir = APP_CONFIG['upload_dir']
     os.makedirs(upload_dir, exist_ok=True)
@@ -52,7 +60,7 @@ def parse_xlsx_from_bytes(file_bytes, file_name):
     with open(file_path, 'wb') as f:
         f.write(file_bytes)
 
-    records = parse_xlsx(file_path)
+    records = parse_xlsx(file_path, sheet_name=sheet_name)
     return records
 
 
