@@ -2227,7 +2227,8 @@
                     showToast(result.success ? `发送成功 → ${result.bot_names}` : '发送失败: ' + (result.error || ''),
                         result.success ? 'success' : 'error');
                 } catch (err) {
-                    showToast('发送异常：' + err, 'error');
+                    const errMsg = (err && err.message) ? err.message : (err && err.errorText) ? err.errorText : String(err);
+                    showToast('发送异常：' + errMsg, 'error');
                 }
             } else {
                 // 使用消息流编排发送

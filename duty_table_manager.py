@@ -105,7 +105,7 @@ def get_table_records(table_id):
 def get_today_duty_persons(table_id):
     """获取今天的值班人员列表（用于通知消息）"""
     from datetime import date
-    today_str = date.today().strftime('%Y-%m-%d')
+    today_str = date.today().strftime('%Y/%m/%d')
 
     conn = get_connection()
     rows = conn.execute(

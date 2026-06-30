@@ -17,9 +17,23 @@ from config import APP_CONFIG
 logger = logging.getLogger(__name__)
 
 
+def _parse_duty_date(date_str):
+    """将值班日期字符串解析为 date 对象，支持 yyyy/mm/dd 和 yyyy-mm-dd 两种格式"""
+    from datetime import datetime
+    if not date_str:
+        return None
+    s = str(date_str).strip()
+    for fmt in ('%Y/%m/%d', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _build_duty_markdown(table_id, title=None):
     """根据值班表构建今日值班 + 下次预告的 Markdown 通知"""
-    from datetime import date
+    from datetime import date as dt_date
     conn = get_connection()
     table = DutyTableModel.get_by_id(conn, int(table_id))
     records = DutyTableModel.get_records(conn, int(table_id))
@@ -29,42 +43,43 @@ def _build_duty_markdown(table_id, title=None):
     if not records:
         return f"## {heading}\n\n暂无值班信息"
 
-    today_str = date.today().strftime('%Y/%m/%d')
+    today = dt_date.today()
 
-    # 查找今日值班记录
-    today_idx = None
-    for i, r in enumerate(records):
-        if r['duty_date'] == today_str:
-            today_idx = i
-            break
+    # 查找今日值班记录（收集所有当天值班人员）
+    today_records = []
+    for r in records:
+        d = _parse_duty_date(r['duty_date'])
+        if d and d == today:
+            today_records.append(r)
 
     lines = []
 
-    if today_idx is not None:
-        r = records[today_idx]
+    if today_records:
         lines.append(f"## **今日值班信息：**")
-        lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
+        for r in today_records:
+            lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
     else:
         lines.append(f"## **今日值班信息：**")
-        lines.append(f"今日（{today_str}）暂无值班安排")
+        lines.append(f"今日（{today.strftime('%Y/%m/%d')}）暂无值班安排")
 
-    # 查找下一次值班（今日之后的第一条）
+    # 查找下一次值班（今天之后的第一条不同日期记录）
     next_idx = None
-    if today_idx is not None and today_idx + 1 < len(records):
-        next_idx = today_idx + 1
-    else:
-        for i, r in enumerate(records):
-            if r['duty_date'] > today_str:
-                next_idx = i
-                break
+    for i, r in enumerate(records):
+        d = _parse_duty_date(r['duty_date'])
+        if d and d > today:
+            next_idx = i
+            break
 
+    lines.append("")
+    lines.append("---")
+    lines.append("")
     if next_idx is not None:
         r = records[next_idx]
-        lines.append("")
-        lines.append("---")
-        lines.append("")
         lines.append(f"## **下次值班预告：**")
         lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
+    else:
+        lines.append(f"## **下次值班预告：**")
+        lines.append(f"暂无后续值班安排，请上传新一轮值班表")
 
     lines.append("")
     lines.append("---")
@@ -85,7 +100,7 @@ def build_duty_markdown_from_excel(file_path, title=None, sheet_name=None):
     """
     import os
     import re
-    from datetime import date, datetime as dt
+    from datetime import date as dt_date, datetime as dt
     import openpyxl
 
     if not os.path.exists(file_path):
@@ -99,13 +114,14 @@ def build_duty_markdown_from_excel(file_path, title=None, sheet_name=None):
     all_rows_data = list(ws.iter_rows(values_only=True))
     wb.close()
 
-    today_str = date.today().strftime('%Y/%m/%d')
+    today = dt_date.today()
     records = []
     for row_data in all_rows_data[1:]:  # 跳过表头行
         if not row_data[0] or not row_data[2]:
             continue
         date_val = row_data[0]
-        if isinstance(date_val, dt):
+        # 兼容 datetime.datetime 和 datetime.date 两种类型
+        if isinstance(date_val, dt_date):
             date_str = date_val.strftime('%Y/%m/%d')
         else:
             m = re.match(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', str(date_val).strip())
@@ -120,39 +136,39 @@ def build_duty_markdown_from_excel(file_path, title=None, sheet_name=None):
     if not records:
         return f"## {heading}\n\n暂无值班信息"
 
-    # 查找今日值班记录
-    today_idx = None
-    for i, r in enumerate(records):
-        if r['duty_date'] == today_str:
-            today_idx = i
-            break
+    # 查找今日值班记录（收集所有当天值班人员）
+    today_records = []
+    for r in records:
+        d = _parse_duty_date(r['duty_date'])
+        if d and d == today:
+            today_records.append(r)
 
     lines = [f'## {heading}', '']
-    if today_idx is not None:
-        r = records[today_idx]
-        lines.append('<h3> **今日值班信息：**</h3>')    
-        lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
+    if today_records:
+        lines.append('<h3> **今日值班信息：**</h3>')
+        for r in today_records:
+            lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
     else:
         lines.append('<h3> **今日值班信息：**</h3>')
-        lines.append(f"今日（{today_str}）暂无值班安排")
+        lines.append(f"今日（{today.strftime('%Y/%m/%d')}）暂无值班安排")
 
     # 下一次值班（今天之后的第一条）
     next_idx = None
-    if today_idx is not None and today_idx + 1 < len(records):
-        next_idx = today_idx + 1
-    else:   
-        for i, r in enumerate(records):
-            if r['duty_date'] > today_str:
-                next_idx = i
-                break
+    for i, r in enumerate(records):
+        d = _parse_duty_date(r['duty_date'])
+        if d and d > today:
+            next_idx = i
+            break
 
+    lines.append('')
+    lines.append('')
     if next_idx is not None:
         r = records[next_idx]
-        lines.append('')
-        #lines.append('---')
-        lines.append('')
         lines.append('<h3> **下次值班预告：**</h3>')
         lines.append(f"{r['duty_date']} {r['weekday']} **{r['person']}**")
+    else:
+        lines.append('<h3> **下次值班预告：**</h3>')
+        lines.append(f"暂无后续值班安排，请上传新一轮值班表")
 
     lines.append('')
     lines.append('---')
